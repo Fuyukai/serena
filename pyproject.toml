@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "serena"
+version = "0.7.0"
+description = "An AMQP 0-9-1 client using AnyIO."
+authors = ["Lura Skye <l@veriny.tf>"]
+license = "LGPL-3.0-or-later"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Operating System :: OS Independent",
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0"
+anyio = "^3.4.0"
+attrs = "^21.2.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.5"
+black = "^21.12b0"
+isort = "^5.10.1"
+trio = "^0.19.0"
+prettyprinter = "^0.18.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 100
