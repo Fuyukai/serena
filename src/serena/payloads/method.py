@@ -333,6 +333,61 @@ class ChannelCloseOkPayload(MethodPayload):
     # empty body
 
 
+## QUEUE ##
+@attr.s(frozen=True, slots=True)
+class QueueDeclarePayload(MethodPayload):
+    """
+    Payload for the ``declare`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 10
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=_type("short"))
+
+    #: The name of the queue being declared. May be empty.
+    name: str = attr.ib()
+
+    #: If True, the server will return a DeclareOk if the queue exists, and an error if it doesn't.
+    passive: bool = attr.ib()
+
+    #: If True, then the queue will persist through restarts.
+    durable: bool = attr.ib()
+
+    #: If True, then the queue is exclusive to this connection.
+    exclusive: bool = attr.ib()
+
+    #: If True, then the queue is automatically deleted when all consumers are finished using it.
+    auto_delete: bool = attr.ib()
+
+    #: If True, no Declare-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: Implementation-specific arguments for the declaration.
+    arguments: Dict[str, Any] = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class QueueDeclareOkPayload(MethodPayload):
+    """
+    Payload for the ``declare-ok`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 11
+    is_client_side = True
+
+    #: The name of the queue.
+    name: str = attr.ib()
+
+    #: The number of the messages present in the queue.
+    message_count: int = attr.ib(metadata=_type("long"))
+
+    #: The number of consumers consuming from the queue.
+    consumer_count: int = attr.ib(metadata=_type("long"))
+
+
 PAYLOAD_TYPES = {
     ClassID.CONNECTION: {
         StartPayload.method: StartPayload,
@@ -353,6 +408,10 @@ PAYLOAD_TYPES = {
         FlowOkPayload.method: FlowOkPayload,
         ChannelClosePayload.method: ChannelClosePayload,
         ChannelCloseOkPayload.method: ChannelCloseOkPayload,
+    },
+    ClassID.QUEUE: {
+        QueueDeclarePayload.method: QueueDeclarePayload,
+        QueueDeclareOkPayload.method: QueueDeclareOkPayload,
     },
 }
 

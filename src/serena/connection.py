@@ -29,6 +29,8 @@ from serena.exc import (
 from serena.frame import Frame, FrameType
 from serena.frameparser import NEED_DATA, FrameParser
 from serena.payloads.method import (
+    ChannelCloseOkPayload,
+    ChannelClosePayload,
     ChannelOpenPayload,
     CloseOkPayload,
     ClosePayload,
@@ -41,8 +43,6 @@ from serena.payloads.method import (
     TuneOkPayload,
     TunePayload,
     method_payload_name,
-    ChannelCloseOkPayload,
-    ChannelClosePayload,
 )
 from serena.utils.bitset import BitSet
 
