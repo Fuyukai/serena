@@ -283,6 +283,7 @@ class FlowPayload(MethodPayload):
     active: bool = attr.ib()
 
 
+@attr.s(frozen=True, slots=True)
 class FlowOkPayload(MethodPayload):
     """
     Payload for the ``flow-ok`` method.
@@ -294,6 +295,42 @@ class FlowOkPayload(MethodPayload):
 
     #: See :attr:`.FlowPayload.active`.
     active: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class ChannelClosePayload(MethodPayload):
+    """
+    Payload for the ``close`` method.
+    """
+
+    klass = ClassID.CHANNEL
+    method = 40
+    is_client_side = True
+
+    #: The code for the error that caused this close.
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=_type("short"))
+
+    #: The text for the error that caused this close.
+    reply_text: str = attr.ib()
+
+    #: The class of the method that caused this close.
+    class_id: int = attr.ib(metadata=_type("short"))
+
+    #: The class of the method that caused this close.
+    method_id: int = attr.ib(metadata=_type("short"))
+
+
+@attr.s(frozen=True, slots=True)
+class ChannelCloseOkPayload(MethodPayload):
+    """
+    Payload for the ``close-ok`` method.
+    """
+
+    klass = ClassID.CHANNEL
+    method = 41
+    is_client_side = True
+
+    # empty body
 
 
 PAYLOAD_TYPES = {
@@ -314,6 +351,8 @@ PAYLOAD_TYPES = {
         ChannelOpenOkPayload.method: ChannelOpenOkPayload,
         FlowPayload.method: FlowPayload,
         FlowOkPayload.method: FlowOkPayload,
+        ChannelClosePayload.method: ChannelClosePayload,
+        ChannelCloseOkPayload.method: ChannelCloseOkPayload,
     },
 }
 

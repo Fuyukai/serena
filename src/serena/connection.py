@@ -41,6 +41,8 @@ from serena.payloads.method import (
     TuneOkPayload,
     TunePayload,
     method_payload_name,
+    ChannelCloseOkPayload,
+    ChannelClosePayload,
 )
 from serena.utils.bitset import BitSet
 
@@ -67,6 +69,9 @@ class AMQPState(enum.IntEnum):
 
 @attr.s(slots=True, frozen=False)
 class HeartbeatStatistics:
+    #: The number of heartbeats so far.
+    heartbeat_count: int = attr.ib(default=0)
+
     #: The previous heartbeat time, in monotonic nanoseconds.
     prev_heartbeat_mn: int = attr.ib(default=None)
 
@@ -91,6 +96,8 @@ class HeartbeatStatistics:
         return self.cur_heartbeat_mn - self.prev_heartbeat_mn
 
     def update(self):
+        self.heartbeat_count += 1
+
         self.prev_heartbeat_mn = self.cur_heartbeat_mn
         self.prev_heartbeat_time = self.cur_heartbeat_time
 
@@ -188,14 +195,6 @@ class AMQPConnection(object):
             await self._sock.aclose()
         finally:
             self._closed = True
-
-    async def _send_heartbeat(self):
-        """
-        Sends a heartbeat frame.
-        """
-
-        data = self._parser.write_heartbeat_frame()
-        await self._sock.send(data)
 
     async def _do_startup_handshake(self, username: str, password: str, vhost: str):
         """
@@ -329,6 +328,16 @@ class AMQPConnection(object):
 
         return channel_object
 
+    async def _close_channel(self, id: int):
+        """
+        Closes a channel.
+        """
+
+        frame = ChannelClosePayload(
+            reply_code=ReplyCode.success, reply_text="Normal close", class_id=0, method_id=0
+        )
+        await self._send_method_frame(id, frame)
+
     async def _handle_control_frame(self, frame: MethodFrame):
         """
         Handles a control frame.
@@ -436,9 +445,21 @@ class AMQPConnection(object):
                     )
 
             elif frame.type == FrameType.METHOD:
+                assert isinstance(frame, MethodFrame)
+
                 channel = frame.channel_id
                 if channel == 0:
                     await self._handle_control_frame(frame)  # type: ignore
+                    continue
+
+                # we intercept certain control frames
+                # channelcloseok is handled here because channels can't deal with their own closure
+                # (as they don't know when they finish)
+
+                if isinstance(frame.payload, ChannelCloseOkPayload):
+                    self._channels[channel] = False
+                    self._channel_channels.pop(channel)
+                    continue
 
                 channel_object = self._channel_channels[channel]
                 await self._enqueue_frame(channel_object, frame)
@@ -469,6 +490,23 @@ class AMQPConnection(object):
             next_frame.payload, CloseOkPayload
         ):
             raise AMQPStateError("Expected CloseOk, but got something else")
+
+    def open_channel(self) -> AsyncContextManager[Channel]:
+        """
+        Opens a new channel.
+
+        :return: An asynchronous context manager that will open a new channel.
+        """
+
+        @asynccontextmanager
+        async def cm():
+            channel = await self._open_channel()
+            try:
+                yield channel
+            finally:
+                await self._close_channel(channel.id)
+
+        return cm()
 
     async def close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         """
@@ -557,11 +595,11 @@ def open_connection(
             **kwargs,
         )
 
-        try:
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(conn._listen_for_messages)
+        async with anyio.create_task_group() as nursery:
+            nursery.start_soon(conn._listen_for_messages)
+            try:
                 yield conn
-        finally:
-            await conn._close_during_teardown()
+            finally:
+                await conn._close()
 
     return _do_open()

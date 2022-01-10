@@ -37,6 +37,14 @@ class Channel(object):
         )
 
     @property
+    def id(self) -> int:
+        """
+        Returns the ID of this channel.
+        """
+
+        return self._channel_id
+
+    @property
     def open(self) -> bool:
         """
         Returns if this channel is open or not.
