@@ -144,8 +144,9 @@ class Channel(object):
                         error if it doesn't. This can be used to inspect server state without
                         modification.
         :param durable: If True, the queue being created will persist past server restarts.
-        :param exclusive: If True, this queue will only belong this connection. Best combined with
-                          an automatically generated queue name.
+        :param exclusive: If True, this queue will only belong to this connection, and will be
+                          automatically deleted when the connection closes. Best combined with an
+                          automatically generated queue name.
         :param auto_delete: If True, this queue will be automatically deleted after all consumers
                             have finished. The queue will never be deleted before the first consumer
                             starts.
