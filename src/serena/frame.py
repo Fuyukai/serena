@@ -29,3 +29,12 @@ class Frame(abc.ABC):
 
     #: The channel ID of this frame.
     channel_id: int = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class HeartbeatFrame(Frame):
+    """
+    A single heartbeat frame. This should have an empty body.
+    """
+
+    type = FrameType.HEARTBEAT

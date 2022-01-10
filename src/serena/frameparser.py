@@ -4,12 +4,13 @@ import logging
 import struct
 from typing import Union
 
-from serena.frame import Frame
+from serena.frame import Frame, HeartbeatFrame
 from serena.payloads.method import (
     MethodFrame,
     MethodPayload,
     deserialise_payload,
-    serialise_payload, method_payload_name,
+    method_payload_name,
+    serialise_payload,
 )
 
 
@@ -22,10 +23,16 @@ NEED_DATA = _NEED_DATA()
 
 logger = logging.getLogger(__name__)
 
+# Dear RabbitMQ authors:
+# Fuck you. I fucking HATE you. Implement the FUCKING SPEC PROPERLY.
+# I love spending a day of my life implementing the AMQP 0-9-1 spec only to find that RabbitMQ
+# fucking does something else. Short strings in tables? Thrown away. Heartbeat frames? Type 8
+# instead of type 4. What the fuck??? Why?????????
+
 METHOD_FRAME = 1
 HEADER_FRAME = 2
 BODY_FRAME = 3
-HEARTBEAT_FRAME = 4
+HEARTBEAT_FRAME = 8
 
 
 class FrameParser(object):
@@ -53,9 +60,7 @@ class FrameParser(object):
         if type == METHOD_FRAME:
             payload = deserialise_payload(payload)
             frame = MethodFrame(channel_id=channel, payload=payload)
-            logger.trace(
-                f"FRAME (METHOD): {method_payload_name(payload)}"
-            )
+            logger.trace(f"FRAME (METHOD): {method_payload_name(payload)}")
             return frame
 
         elif type == HEADER_FRAME:
@@ -65,7 +70,11 @@ class FrameParser(object):
             raise NotImplementedError("body frames")
 
         elif type == HEARTBEAT_FRAME:
-            raise NotImplementedError("heartbeat frames")
+            assert channel == 0, "heartbeats cannot be on any channel other than zero"
+            return HeartbeatFrame(channel_id=0)
+
+        else:
+            raise ValueError(f"Invalid frame type: {type}")
 
     @staticmethod
     def write_method_frame(channel: int, payload: MethodPayload) -> bytes:
@@ -83,6 +92,12 @@ class FrameParser(object):
         header = struct.pack(">BHI", METHOD_FRAME, channel, size)
         result = header + frame_body + b"\xCE"
         return result
+
+    @staticmethod
+    def write_heartbeat_frame() -> bytes:
+        """
+        Writes a single heartbeat frame into a bytearray.
+        """
 
     def receive_data(self, data: bytes):
         """
