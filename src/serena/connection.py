@@ -16,8 +16,16 @@ from anyio.lowlevel import checkpoint
 from prettyprinter import cpprint
 
 from serena.frameparser import NEED_DATA, FrameParser
-from serena.payloads.method import MethodFrame, StartOkPayload, StartPayload, MethodPayload, \
-    TunePayload, TuneOkPayload, OpenPayload, OpenOkPayload
+from serena.payloads.method import (
+    MethodFrame,
+    MethodPayload,
+    OpenOkPayload,
+    OpenPayload,
+    StartOkPayload,
+    StartPayload,
+    TuneOkPayload,
+    TunePayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -147,20 +155,26 @@ class AMQPConnection(object):
                 payload = incoming_frame.payload
                 if isinstance(payload, TunePayload):
                     wanted_channel_size = min(payload.max_channels, 65536)
-                    logger.debug(f"Server asks for {payload.max_channels} channels, "
-                                 f"we're asking for {wanted_channel_size} channels")
+                    logger.debug(
+                        f"Server asks for {payload.max_channels} channels, "
+                        f"we're asking for {wanted_channel_size} channels"
+                    )
 
                     wanted_frame_size = min(payload.max_frame_size, 131072)
-                    logger.debug(f"Server asks for {payload.max_frame_size}B frame sizes, "
-                                 f"we're asking for {wanted_frame_size}B frame sizes")
+                    logger.debug(
+                        f"Server asks for {payload.max_frame_size}B frame sizes, "
+                        f"we're asking for {wanted_frame_size}B frame sizes"
+                    )
 
-                    logger.debug(f"Server asks for {payload.heartbeat_delay} seconds between "
-                                 f"heartbeats and we're 100% OK with that")
+                    logger.debug(
+                        f"Server asks for {payload.heartbeat_delay} seconds between "
+                        f"heartbeats and we're 100% OK with that"
+                    )
 
                     tune_ok = TuneOkPayload(
                         max_channels=wanted_channel_size,
                         max_frame_size=wanted_frame_size,
-                        heartbeat_delay=payload.heartbeat_delay
+                        heartbeat_delay=payload.heartbeat_delay,
                     )
                     await self._send_method_frame(0, tune_ok)
 

@@ -54,8 +54,10 @@ class FrameParser(object):
         if type == METHOD_FRAME:
             payload = deserialise_payload(payload)
             frame = MethodFrame(channel_id=channel, payload=payload)
-            logger.trace(f"FRAME (METHOD): {frame.payload.klass.name}/{frame.payload.method}/"
-                         f"{builtins.type(payload).__name__}")
+            logger.trace(
+                f"FRAME (METHOD): {frame.payload.klass.name}/{frame.payload.method}/"
+                f"{builtins.type(payload).__name__}"
+            )
             return frame
 
         elif type == HEADER_FRAME:
