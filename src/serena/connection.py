@@ -338,6 +338,7 @@ class AMQPConnection(object):
 
         if isinstance(payload, ClosePayload):
             # server closing connection
+            logger.info("Server requested close...")
             await self._send_method_frame(0, CloseOkPayload())
             await self._close_ungracefully()
 
@@ -446,6 +447,8 @@ class AMQPConnection(object):
         if self._closed:
             await checkpoint()
             return
+
+        logger.debug("Closing AMQP connection")
 
         payload = ClosePayload(
             reply_code=ReplyCode(reply_code), reply_text=reply_text, class_id=0, method_id=0
