@@ -6,6 +6,7 @@ from typing import Any, ClassVar, Dict, Generic, TypeVar, get_origin
 
 import attr
 
+from serena.enums import ReplyCode
 from serena.frame import Frame, FrameType
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
 
@@ -178,13 +179,14 @@ class TuneOkPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class OpenPayload(MethodPayload):
+class ConnectionOpenPayload(MethodPayload):
     """
     Payload for the ``open`` method.
     """
 
     klass = ClassID.CONNECTION
     method = 40
+    is_client_side = False
 
     #: The virtual host to open a connection to.
     virtual_host: str = attr.ib()
@@ -194,7 +196,7 @@ class OpenPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class OpenOkPayload(MethodPayload):
+class ConnectionOpenOkPayload(MethodPayload):
     """
     Payload for the ``open-ok`` method.
     """
@@ -217,7 +219,7 @@ class ClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: int = attr.ib(metadata=_type("short"))
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=_type("short"))
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
@@ -240,6 +242,60 @@ class CloseOkPayload(MethodPayload):
     is_client_side = True
 
 
+## == CHANNEL == ##
+@attr.s(frozen=True, slots=True)
+class ChannelOpenPayload(MethodPayload):
+    """
+    Payload for the ``open`` method.
+    """
+
+    klass = ClassID.CHANNEL
+    method = 10
+    is_client_side = False
+
+    reserved_1: str = attr.ib(default="")
+
+
+@attr.s(frozen=True, slots=True)
+class ChannelOpenOkPayload(MethodPayload):
+    """
+    Payload for the ``open-ok`` method.
+    """
+
+    klass = ClassID.CHANNEL
+    method = 11
+    is_client_side = True
+
+    reserved_1: bytes = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class FlowPayload(MethodPayload):
+    """
+    Payload for the ``flow`` method.
+    """
+
+    klass = ClassID.CHANNEL
+    method = 20
+    is_client_side = True
+
+    #: If the channel should start processing messages again or not.
+    active: bool = attr.ib()
+
+
+class FlowOkPayload(MethodPayload):
+    """
+    Payload for the ``flow-ok`` method.
+    """
+
+    klass = ClassID.CHANNEL
+    method = 21
+    is_client_side = True
+
+    #: See :attr:`.FlowPayload.active`.
+    active: bool = attr.ib()
+
+
 PAYLOAD_TYPES = {
     ClassID.CONNECTION: {
         StartPayload.method: StartPayload,
@@ -248,11 +304,17 @@ PAYLOAD_TYPES = {
         SecureOkPayload.method: SecureOkPayload,
         TunePayload.method: TunePayload,
         TuneOkPayload.method: TuneOkPayload,
-        OpenPayload.method: OpenPayload,
-        OpenOkPayload.method: OpenOkPayload,
+        ConnectionOpenPayload.method: ConnectionOpenPayload,
+        ConnectionOpenOkPayload.method: ConnectionOpenOkPayload,
         ClosePayload.method: ClosePayload,
         CloseOkPayload.method: CloseOkPayload,
-    }
+    },
+    ClassID.CHANNEL: {
+        ChannelOpenPayload.method: ChannelOpenPayload,
+        ChannelOpenOkPayload.method: ChannelOpenOkPayload,
+        FlowPayload.method: FlowPayload,
+        FlowOkPayload.method: FlowOkPayload,
+    },
 }
 
 

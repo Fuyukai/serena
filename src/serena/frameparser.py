@@ -58,9 +58,11 @@ class FrameParser(object):
         """
 
         if type == METHOD_FRAME:
-            payload = deserialise_payload(payload)
-            frame = MethodFrame(channel_id=channel, payload=payload)
-            logger.trace(f"FRAME (METHOD): {method_payload_name(payload)}")
+            decoded_payload = deserialise_payload(payload)
+            frame = MethodFrame(channel_id=channel, payload=decoded_payload)
+            logger.trace(
+                f"S->C FRAME (METHOD): {method_payload_name(decoded_payload)} ({len(payload)}B)"
+            )
             return frame
 
         elif type == HEADER_FRAME:
@@ -91,13 +93,8 @@ class FrameParser(object):
 
         header = struct.pack(">BHI", METHOD_FRAME, channel, size)
         result = header + frame_body + b"\xCE"
+        logger.trace(f"C->S FRAME (METHOD): {method_payload_name(payload)} ({size}B)")
         return result
-
-    @staticmethod
-    def write_heartbeat_frame() -> bytes:
-        """
-        Writes a single heartbeat frame into a bytearray.
-        """
 
     def receive_data(self, data: bytes):
         """
