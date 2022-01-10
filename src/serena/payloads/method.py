@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 import enum
-import sys
 from typing import Any, ClassVar, Dict, Generic, TypeVar, get_origin
 
 import attr
@@ -351,3 +350,11 @@ def serialise_payload(payload: MethodPayload) -> bytes:
 
     buf.force_write_bits()
     return header + buf.get_data()
+
+
+def method_payload_name(payload: MethodPayload):
+    """
+    Gets the name of a method payload.
+    """
+
+    return f"{payload.klass.name}/{payload.method}/{type(payload).__name__}"

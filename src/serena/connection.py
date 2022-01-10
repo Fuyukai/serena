@@ -13,7 +13,6 @@ from typing import AsyncContextManager, Union
 import anyio
 from anyio.abc import ByteStream
 from anyio.lowlevel import checkpoint
-from prettyprinter import cpprint
 
 from serena.frameparser import NEED_DATA, FrameParser
 from serena.payloads.method import (
@@ -24,7 +23,7 @@ from serena.payloads.method import (
     StartOkPayload,
     StartPayload,
     TuneOkPayload,
-    TunePayload,
+    TunePayload, method_payload_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +52,12 @@ class AMQPConnection(object):
     A single AMQP connection.
     """
 
-    def __init__(self, stream: ByteStream):
+    def __init__(self, stream: ByteStream, *, heartbeat_interval: int):
+        """
+        :param stream: The :class:`.ByteStream` to use.
+        :param heartbeat_interval: The heartbeat interval to negotiate with, in seconds.
+        """
+
         self._sock = stream
         self._parser = FrameParser()
 
@@ -116,7 +120,7 @@ class AMQPConnection(object):
                 if not isinstance(payload, StartPayload):
                     # todo make specific exception
                     await self.close()
-                    raise ValueError(f"Expected StartPayload, got {payload.klass}/{payload.method}")
+                    raise ValueError(f"Expected StartPayload, got {method_payload_name(payload)}")
 
                 version = (payload.version_major, payload.version_minor)
                 if version != (0, 9):
@@ -135,7 +139,7 @@ class AMQPConnection(object):
                     # we only speak plain (for now...)
                     await self.close()
                     raise ValueError(
-                        f"Expected PLAIN authentication method, but we only have " f"{mechanisms}"
+                        f"Expected PLAIN authentication method, but we only have {mechanisms}"
                     )
 
                 sasl_response = b"\x00%s\x00%s" % (
@@ -183,7 +187,7 @@ class AMQPConnection(object):
                     await self._send_method_frame(0, open)
                     self._state = AMQPState.RECEIVED_TUNE
                 else:
-                    raise ValueError(f"Expected Tune, got {payload.klass}/{payload.method}")
+                    raise ValueError(f"Expected Tune, got {method_payload_name(payload)}")
 
             elif self._state == AMQPState.RECEIVED_TUNE:
                 payload = incoming_frame.payload
@@ -192,6 +196,8 @@ class AMQPConnection(object):
                     logger.info("AMQP connection is ready to go")
                     self._state = AMQPState.READY
                     break
+                else:
+                    raise ValueError(f"Expected OpenOk, got {method_payload_name(payload)}")
 
     async def close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         """

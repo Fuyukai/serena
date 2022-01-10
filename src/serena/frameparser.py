@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 import logging
 import struct
 from typing import Union
@@ -10,7 +9,7 @@ from serena.payloads.method import (
     MethodFrame,
     MethodPayload,
     deserialise_payload,
-    serialise_payload,
+    serialise_payload, method_payload_name,
 )
 
 
@@ -21,7 +20,7 @@ class _NEED_DATA:
 #: A special singleton object used if the parser needs more data.
 NEED_DATA = _NEED_DATA()
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 METHOD_FRAME = 1
 HEADER_FRAME = 2
@@ -55,8 +54,7 @@ class FrameParser(object):
             payload = deserialise_payload(payload)
             frame = MethodFrame(channel_id=channel, payload=payload)
             logger.trace(
-                f"FRAME (METHOD): {frame.payload.klass.name}/{frame.payload.method}/"
-                f"{builtins.type(payload).__name__}"
+                f"FRAME (METHOD): {method_payload_name(payload)}"
             )
             return frame
 
