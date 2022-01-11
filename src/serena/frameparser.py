@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Union
+from math import ceil
+from typing import List, Union
 
 from serena.frame import Frame, HeartbeatFrame
+from serena.payloads.header import BasicHeader, serialise_basic_header
 from serena.payloads.method import (
+    ClassID,
     MethodFrame,
     MethodPayload,
     deserialise_payload,
@@ -61,7 +64,8 @@ class FrameParser(object):
             decoded_payload = deserialise_payload(payload)
             frame = MethodFrame(channel_id=channel, payload=decoded_payload)
             logger.trace(
-                f"S->C FRAME (METHOD): {method_payload_name(decoded_payload)} ({len(payload)}B)"
+                f"S#{channel}->C FRAME (METHOD): {method_payload_name(decoded_payload)} "
+                f"({len(payload)}B)"
             )
             return frame
 
@@ -73,28 +77,76 @@ class FrameParser(object):
 
         elif type == HEARTBEAT_FRAME:
             assert channel == 0, "heartbeats cannot be on any channel other than zero"
+            logger.trace("S->C FRAME (HEARTBEAT)")
             return HeartbeatFrame(channel_id=0)
 
         else:
             raise ValueError(f"Invalid frame type: {type}")
 
     @staticmethod
+    def _pack_frame(type_: int, channel: int, payload: bytes) -> bytes:
+        """
+        Packs a single frame with a header.
+
+        :param type_: The type of the frame.
+        :param channel: The channel the frame is on.
+        :param payload: The opaque payload body.
+        :return: A fully encoded frame.
+        """
+
+        size = len(payload)
+        header = struct.pack(">BHI", type_, channel, size)
+        result = header + payload + b"\xCE"
+        return result
+
+    @staticmethod
     def write_method_frame(channel: int, payload: MethodPayload) -> bytes:
         """
-        Writes a method payload into a bytearray.
+        Writes a method payload into a bytestring.
 
         :param channel: The channel ID this payload is being sent on.
         :param payload: The payload object to send.
         :return: The :class:`bytes` to send over the wire.
         """
 
-        frame_body = serialise_payload(payload)
-        size = len(frame_body)
-
-        header = struct.pack(">BHI", METHOD_FRAME, channel, size)
-        result = header + frame_body + b"\xCE"
-        logger.trace(f"C->S FRAME (METHOD): {method_payload_name(payload)} ({size}B)")
+        body = serialise_payload(payload)
+        result = FrameParser._pack_frame(METHOD_FRAME, channel, body)
+        logger.trace(
+            f"C#{channel}->S FRAME (METHOD): {method_payload_name(payload)} ({len(body)} bytes)"
+        )
         return result
+
+    @staticmethod
+    def write_header_frame(
+        channel: int, method_klass: ClassID, body_length: int, headers: BasicHeader
+    ) -> bytes:
+        """
+        Writes a header payload into a bytearray.
+        """
+
+        frame_body = serialise_basic_header(method_klass, body_length, headers)
+        result = FrameParser._pack_frame(HEADER_FRAME, channel, frame_body)
+        logger.trace(f"C{channel}->S FRAME (HEADER): {method_klass.name} ({len(frame_body)} bytes)")
+        return result
+
+    @staticmethod
+    def write_body_frames(channel: int, body: bytes, max_frame_size: int) -> List[bytes]:
+        """
+        Writes a set of body frames into a set of byte strings.
+        """
+
+        frames_needed = ceil(len(body) / max_frame_size)
+        frames = []
+
+        for i in range(0, frames_needed):
+            frame_body = body[max_frame_size * i : max_frame_size * (i + 1)]
+            frame = FrameParser._pack_frame(BODY_FRAME, channel, frame_body)
+            logger.trace(
+                f"C{channel}->S FRAME (BODY): {i + 1} / {frames_needed} ({len(frame_body)} bytes)"
+            )
+            frames.append(frame)
+
+        return frames
 
     def receive_data(self, data: bytes):
         """

@@ -390,6 +390,7 @@ class QueueDeclareOkPayload(MethodPayload):
 
 
 ## BASIC ##
+@attr.s(frozen=True, slots=True)
 class BasicPublishPayload(MethodPayload):
     """
     Payload for the ``publish`` method.
@@ -439,6 +440,9 @@ PAYLOAD_TYPES = {
     ClassID.QUEUE: {
         QueueDeclarePayload.method: QueueDeclarePayload,
         QueueDeclareOkPayload.method: QueueDeclareOkPayload,
+    },
+    ClassID.BASIC: {
+        BasicPublishPayload.method: BasicPublishPayload,
     },
 }
 

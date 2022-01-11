@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from math import ceil
 from typing import TYPE_CHECKING, Any, Dict, Type, TypeVar, cast
 
 import anyio
 from anyio import Event, Lock
 
 from serena.frame import Frame
+from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
+    BasicPublishPayload,
     ChannelOpenOkPayload,
     MethodFrame,
     MethodPayload,
@@ -21,6 +24,7 @@ if TYPE_CHECKING:
 _PAYLOAD = TypeVar("_PAYLOAD", bound=MethodPayload)
 
 
+# noinspection PyProtectedMember
 class Channel(object):
     """
     A wrapper around an AMQP channel.
@@ -169,3 +173,54 @@ class Channel(object):
 
         result = await self._send_and_receive_frame(payload, QueueDeclareOkPayload)
         return result.payload.name
+
+    async def basic_publish(
+        self,
+        exchange_name: str,
+        routing_key: str,
+        body: bytes,
+        *,
+        header: BasicHeader = None,
+        mandatory: bool = False,
+        immediate: bool = False,
+    ):
+        """
+        Publishes a message to a specific exchange.
+
+        :param exchange_name: The name of the exchange to publish to. This can be blank to mean the
+                              default exchange.
+        :param routing_key: The routing key to publish to.
+        :param body: The body for this payload.
+        :param header: The headers to use for this message. If unset, will use the default blank
+                       headers.
+        :param mandatory: Iff True, the server must return a ``Return`` message if the message
+                          could not be routed to a queue.
+        :param immediate: Iff True, the server must return a ``Return`` message if the message could
+                          not be immediately consumed.
+        """
+
+        # this is slightly different as the server doesn't (normally) respond, and we have to send
+        # manual frames.
+
+        async with self._lock:
+            method_payload = BasicPublishPayload(
+                reserved_1=1,
+                name=exchange_name,
+                routing_key=routing_key,
+                mandatory=mandatory,
+                immediate=immediate,
+            )
+
+            # 1) method frame
+            await self._connection._send_method_frame(self._channel_id, method_payload)
+            # 2) header frame
+            headers = header or BasicHeader()
+            await self._connection._send_header_frame(
+                self._channel_id,
+                method_klass=method_payload.klass,
+                body_length=len(body),
+                headers=headers,
+            )
+
+            # 3) body
+            await self._connection._send_body_frames(self._channel_id, body)

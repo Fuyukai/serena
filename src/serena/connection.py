@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import partial
@@ -28,10 +29,12 @@ from serena.exc import (
 )
 from serena.frame import Frame, FrameType
 from serena.frameparser import NEED_DATA, FrameParser
+from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
     ChannelCloseOkPayload,
     ChannelClosePayload,
     ChannelOpenPayload,
+    ClassID,
     CloseOkPayload,
     ClosePayload,
     ConnectionOpenOkPayload,
@@ -127,11 +130,14 @@ class AMQPConnection(object):
         self._parser = FrameParser()
 
         self._state = AMQPState.INITIAL
+        self._server_closing = False
         self._closed = False
 
         self._heartbeat_interval = heartbeat_interval
         # what we negotiate with the server
         self._actual_heartbeat_interval = 0
+
+        self._max_frame_size = 0
 
         # list of 64-bit ints (as not to overflow long values and cause a bigint)
         # that is used to assign the next channel ID
@@ -180,6 +186,30 @@ class AMQPConnection(object):
 
         data = self._parser.write_method_frame(channel, payload)
         await self._sock.send(data)
+
+    async def _send_header_frame(
+        self,
+        channel: int,
+        *,
+        method_klass: ClassID,
+        body_length: int,
+        headers: BasicHeader,
+    ):
+        """
+        Sends a single header frame.
+        """
+
+        data = self._parser.write_header_frame(channel, method_klass, body_length, headers)
+        await self._sock.send(data)
+
+    async def _send_body_frames(self, channel: int, body: bytes):
+        """
+        Sends multiple body frames.
+        """
+
+        data = self._parser.write_body_frames(channel, body, max_frame_size=self._max_frame_size)
+        for frame in data:
+            await self._sock.send(frame)
 
     async def _close_ungracefully(self):
         """
@@ -272,6 +302,7 @@ class AMQPConnection(object):
                         f"Server asks for {payload.max_frame_size}B frame sizes, "
                         f"we're asking for {wanted_frame_size}B frame sizes"
                     )
+                    self._max_frame_size = wanted_frame_size
 
                     hb_interval = min(payload.heartbeat_delay, self._heartbeat_interval)
                     logger.debug(
@@ -348,6 +379,7 @@ class AMQPConnection(object):
         if isinstance(payload, ClosePayload):
             # server closing connection
             logger.info("Server requested close...")
+            self._server_closing = True
             await self._send_method_frame(0, CloseOkPayload())
             await self._close_ungracefully()
 
@@ -465,7 +497,7 @@ class AMQPConnection(object):
                 await self._enqueue_frame(channel_object, frame)
 
     async def _close(self, reply_code: int = 200, reply_text: str = "Normal close"):
-        if self._closed:
+        if self._closed or self._server_closing:
             await checkpoint()
             return
 

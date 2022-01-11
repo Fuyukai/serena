@@ -348,7 +348,7 @@ class EncodingBuffer(object):
         if self._table_mode:
             raise ValueError("unsigned longlongs have no table type")
 
-        self._write(struct.pack(">L", value))
+        self._write(struct.pack(">Q", value))
 
     def write_longlong_signed(self, value: int):
         """
@@ -358,7 +358,7 @@ class EncodingBuffer(object):
         if self._table_mode:
             self._write(b"l")
 
-        self._write(struct.pack(">l", value))
+        self._write(struct.pack(">q", value))
 
     @overload
     def write_timestamp(self, value: datetime):
