@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import struct
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import attr
 

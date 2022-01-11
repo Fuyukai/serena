@@ -6,7 +6,6 @@ import logging
 import os
 import sys
 import time
-import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import partial
@@ -45,7 +44,6 @@ from serena.payloads.method import (
     StartPayload,
     TuneOkPayload,
     TunePayload,
-    method_payload_name,
 )
 from serena.utils.bitset import BitSet
 
