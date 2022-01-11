@@ -8,7 +8,11 @@ import attr
 
 from serena.enums import ReplyCode
 from serena.frame import Frame, FrameType
-from serena.payloads.encoding import decode_attrs_attribute, encode_attrs_attribute, aq_type
+from serena.payloads.encoding import (
+    aq_type,
+    decode_attrs_attribute,
+    encode_attrs_attribute,
+)
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
 
 

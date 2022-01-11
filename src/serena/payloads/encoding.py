@@ -1,4 +1,4 @@
-from typing import Any, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from attr import Attribute
 
@@ -20,6 +20,10 @@ def encode_attrs_attribute(buf: EncodingBuffer, att: Attribute, value: Any):
     """
 
     field_type = get_origin(att.type) or att.type
+
+    if field_type is Union:
+        unwrapped_field_type = get_args(att.type)[0]
+        field_type = get_origin(unwrapped_field_type) or unwrapped_field_type
 
     if field_type is str:
         fn = buf.write_short_string
@@ -57,6 +61,11 @@ def decode_attrs_attribute(buf: DecodingBuffer, att: Attribute) -> Any:
     """
 
     field_type = get_origin(att.type) or att.type
+
+    # we only allow Optional unions so this is always safe
+    if field_type is Union:
+        unwrapped_field_type = get_args(att.type)[0]
+        field_type = get_origin(unwrapped_field_type) or unwrapped_field_type
 
     if field_type is str:
         fn = buf.read_short_string
