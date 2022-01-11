@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from typing import Type
 
 from serena.enums import ReplyCode
-from serena.payloads.method import MethodPayload, method_payload_name
+from serena.payloads.method import ClosePayload, MethodPayload, method_payload_name
 
 
 class AMQPError(Exception):
@@ -49,6 +51,19 @@ class UnexpectedCloseError(AMQPError):
     """
 
     __slots__ = ("reply_code", "reply_message", "class_id", "method_id")
+
+    @classmethod
+    def of(cls, payload: ClosePayload) -> UnexpectedCloseError:
+        """
+        Creates a new :class:`.UnexpectedCloseError` from a close payload.
+        """
+
+        return UnexpectedCloseError(
+            reply_code=payload.reply_code,
+            reply_message=payload.reply_text,
+            class_id=payload.class_id,
+            method_id=payload.method_id,
+        )
 
     def __init__(
         self,

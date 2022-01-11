@@ -15,6 +15,7 @@ from typing import AsyncContextManager, Dict, Optional, Union
 
 import anyio
 import attr
+from anyio import BrokenResourceError, CancelScope, ClosedResourceError
 from anyio.abc import ByteStream
 from anyio.lowlevel import checkpoint
 
@@ -126,15 +127,17 @@ class AMQPConnection(object):
 
         self._sock = stream
         self._parser = FrameParser()
-
-        self._state = AMQPState.INITIAL
-        self._server_closing = False
-        self._closed = False
-
         self._heartbeat_interval = heartbeat_interval
-        # what we negotiate with the server
-        self._actual_heartbeat_interval = 0
+        self._channel_buffer_size = channel_buffer_size
+        self._cancel_scope: CancelScope = None  # type: ignore
 
+        self._closed = False
+        self._server_requested_close = False
+        # info
+        self._close_info: Optional[ClosePayload] = None
+
+        # what we
+        self._actual_heartbeat_interval = 0
         self._max_frame_size = 0
 
         # list of 64-bit ints (as not to overflow long values and cause a bigint)
@@ -143,7 +146,6 @@ class AMQPConnection(object):
 
         # mapping of channel id -> Channel
         self._channel_channels: Dict[int, Channel] = {}
-        self._channel_buffer_size = channel_buffer_size
 
         self._close_event = anyio.Event()
 
@@ -217,8 +219,6 @@ class AMQPConnection(object):
         if self._closed:
             return await checkpoint()
 
-        logger.debug("The connection is closing...")
-
         try:
             await self._sock.aclose()
         finally:
@@ -229,6 +229,7 @@ class AMQPConnection(object):
         Does the startup handshake.
         """
 
+        state = AMQPState.INITIAL
         logger.debug("Sending AMQP handshake...")
 
         open_message = b"AMQP\x00\x00\x09\x01"
@@ -243,7 +244,7 @@ class AMQPConnection(object):
                 await self._handle_control_frame(frame=incoming_frame)
                 continue
 
-            if self._state == AMQPState.INITIAL:
+            if state == AMQPState.INITIAL:
                 payload = incoming_frame.payload
                 if not isinstance(payload, StartPayload):
                     # todo make specific exception
@@ -281,9 +282,9 @@ class AMQPConnection(object):
                     locale="en_US",
                 )
                 await self._send_method_frame(0, ok_frame)
-                self._state = AMQPState.RECEIVED_START
+                state = AMQPState.RECEIVED_START
 
-            elif self._state == AMQPState.RECEIVED_START:
+            elif state == AMQPState.RECEIVED_START:
                 payload = incoming_frame.payload
                 if isinstance(payload, TunePayload):
                     wanted_channel_size = min(payload.max_channels, 65535)
@@ -319,16 +320,16 @@ class AMQPConnection(object):
                     # open the connection now
                     open = ConnectionOpenPayload(virtual_host=vhost)
                     await self._send_method_frame(0, open)
-                    self._state = AMQPState.RECEIVED_TUNE
+                    state = AMQPState.RECEIVED_TUNE
                 else:
                     raise InvalidPayloadTypeError(TunePayload, payload)
 
-            elif self._state == AMQPState.RECEIVED_TUNE:
+            elif state == AMQPState.RECEIVED_TUNE:
                 payload = incoming_frame.payload
                 if isinstance(payload, ConnectionOpenOkPayload):
                     # we are open
                     logger.info("AMQP connection is ready to go")
-                    self._state = AMQPState.READY
+                    state = AMQPState.READY
                     break
                 else:
                     raise InvalidPayloadTypeError(ConnectionOpenOkPayload, payload)
@@ -377,18 +378,11 @@ class AMQPConnection(object):
         if isinstance(payload, ClosePayload):
             # server closing connection
             logger.info("Server requested close...")
-            self._server_closing = True
-            await self._send_method_frame(0, CloseOkPayload())
-            await self._close_ungracefully()
-
-            if payload.reply_code != 200:
-                raise UnexpectedCloseError(
-                    payload.reply_code, payload.reply_text, payload.class_id, payload.method_id
-                )
-
-        elif isinstance(payload, CloseOkPayload):
-            # client closing connection
-            await self._close_ungracefully()
+            self._server_requested_close = True
+            self._close_info = payload
+            # cancel our worker tasks
+            # noinspection PyAsyncCall
+            self._cancel_scope.cancel()
 
     async def _enqueue_frame(self, channel: Channel, frame: Frame):
         """
@@ -495,31 +489,55 @@ class AMQPConnection(object):
                 await self._enqueue_frame(channel_object, frame)
 
     async def _close(self, reply_code: int = 200, reply_text: str = "Normal close"):
-        if self._closed or self._server_closing:
+        if self._closed:
             await checkpoint()
             return
 
-        logger.debug("Closing AMQP connection")
+        # at this point we're being called in the finally, so we have exclusive control of the
+        # socket
+        # we may be being cancelled, however, so we need to shield ourselves when sending more
+        # things
 
-        payload = ClosePayload(
-            reply_code=ReplyCode(reply_code), reply_text=reply_text, class_id=0, method_id=0
-        )
-        await self._send_method_frame(0, payload)
+        with CancelScope(shield=True):
+            # send a CloseOk method if the server requested our closure
+            if self._server_requested_close:
+                logger.debug("Acknowledging server close...")
+                payload = CloseOkPayload()
+                await self._send_method_frame(0, payload)
+                await self._close_ungracefully()
 
-    async def _close_during_teardown(self):
-        """
-        Closes during teardown. This reads the CancelOk message directly.
-        """
+                if self._close_info.reply_code != 200:
+                    raise UnexpectedCloseError.of(self._close_info)
 
-        await self._close()
-        # manually drive the next frame as the task has been killed by now
-        next_frame = await self._read_single_frame()
-        await self._close_ungracefully()
+            else:
+                logger.debug("Sending close payload...")
 
-        if not isinstance(next_frame, MethodFrame) or not isinstance(
-            next_frame.payload, CloseOkPayload
-        ):
-            raise AMQPStateError("Expected CloseOk, but got something else")
+                payload = ClosePayload(
+                    reply_code=ReplyCode(reply_code), reply_text=reply_text, class_id=0, method_id=0
+                )
+
+                await self._send_method_frame(0, payload)
+
+                try:
+                    while True:
+                        # drain previous frames
+                        # channels will send their own close frame before we get a chance to drain
+                        # it
+
+                        try:
+                            reply = await self._read_single_frame()
+                        except (BrokenResourceError, ClosedResourceError):
+                            raise AMQPStateError(
+                                f"Expected CloseOk, but connection failed to send it"
+                            )
+
+                        if isinstance(reply, MethodFrame) and isinstance(
+                            reply.payload, CloseOkPayload
+                        ):
+                            logger.debug("Received CloseOk, closing connection")
+                            return
+                finally:
+                    await self._close_ungracefully()
 
     def open_channel(self) -> AsyncContextManager[Channel]:
         """
@@ -534,7 +552,8 @@ class AMQPConnection(object):
             try:
                 yield channel
             finally:
-                await self._close_channel(channel.id)
+                if not (self._closed or self._server_requested_close):
+                    await self._close_channel(channel.id)
 
         return cm()
 
@@ -547,10 +566,12 @@ class AMQPConnection(object):
         :return: Nothing.
         """
 
-        # ungraceful close is called by the handle control frame method, so we only need to wait
-        # until that gets back to us.
+        # close any background tasks
+        if not self._cancel_scope.cancel_called:
+            # noinspection PyAsyncCall
+            self._cancel_scope.cancel()
+
         await self._close(reply_code, reply_text)
-        await self._close_event.wait()
 
 
 async def _open_connection(
@@ -625,11 +646,12 @@ def open_connection(
             **kwargs,
         )
 
-        async with anyio.create_task_group() as nursery:
-            nursery.start_soon(conn._listen_for_messages)
-            try:
+        try:
+            async with anyio.create_task_group() as nursery:
+                conn._cancel_scope = nursery.cancel_scope
+                nursery.start_soon(conn._listen_for_messages)
                 yield conn
-            finally:
-                await conn._close()
+        finally:
+            await conn.close()
 
     return _do_open()
