@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import abc
 import enum
-from typing import Any, ClassVar, Dict, Generic, TypeVar, get_origin
+from typing import Any, ClassVar, Dict, Generic, TypeVar
 
 import attr
 
 from serena.enums import ReplyCode
 from serena.frame import Frame, FrameType
+from serena.payloads.encoding import decode_attrs_attribute, encode_attrs_attribute, aq_type
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
 
 
@@ -56,10 +57,6 @@ class MethodFrame(Frame, Generic[_PAYLOAD_TYPE]):
     payload: _PAYLOAD_TYPE = attr.ib()
 
 
-def _type(name):
-    return {"amqp_type": name}
-
-
 ## == CONNECTION == ##
 @attr.s(frozen=True, slots=True)
 class StartPayload(MethodPayload):
@@ -72,10 +69,10 @@ class StartPayload(MethodPayload):
     is_client_side = False
 
     #: The major version of the protocol.
-    version_major: int = attr.ib(metadata=_type("octet"))
+    version_major: int = attr.ib(metadata=aq_type("octet"))
 
     #: The minor version of the protocol.
-    version_minor: int = attr.ib(metadata=_type("octet"))
+    version_minor: int = attr.ib(metadata=aq_type("octet"))
 
     #: The server properties.
     properties: Dict[str, Any] = attr.ib()
@@ -149,13 +146,13 @@ class TunePayload(MethodPayload):
     is_client_side = False
 
     #: The server's proposed maximum channels.
-    max_channels: int = attr.ib(metadata=_type("short"))
+    max_channels: int = attr.ib(metadata=aq_type("short"))
 
     #: The server's proposed maximum frame size.
-    max_frame_size: int = attr.ib(metadata=_type("long"))
+    max_frame_size: int = attr.ib(metadata=aq_type("long"))
 
     #: The server's desired heartbeat delay.
-    heartbeat_delay: int = attr.ib(metadata=_type("short"))
+    heartbeat_delay: int = attr.ib(metadata=aq_type("short"))
 
 
 @attr.s(frozen=True, slots=True)
@@ -169,13 +166,13 @@ class TuneOkPayload(MethodPayload):
     is_client_side = True
 
     #: The client's negotiated maximum channels.
-    max_channels: int = attr.ib(metadata=_type("short"))
+    max_channels: int = attr.ib(metadata=aq_type("short"))
 
     #: The client's negotiated maximum frame size.
-    max_frame_size: int = attr.ib(metadata=_type("long"))
+    max_frame_size: int = attr.ib(metadata=aq_type("long"))
 
     #: The client's desired heartbeat delay.
-    heartbeat_delay: int = attr.ib(metadata=_type("short"))
+    heartbeat_delay: int = attr.ib(metadata=aq_type("short"))
 
 
 @attr.s(frozen=True, slots=True)
@@ -219,16 +216,16 @@ class ClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=_type("short"))
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
 
     #: The class of the method that caused this close.
-    class_id: int = attr.ib(metadata=_type("short"))
+    class_id: int = attr.ib(metadata=aq_type("short"))
 
     #: The class of the method that caused this close.
-    method_id: int = attr.ib(metadata=_type("short"))
+    method_id: int = attr.ib(metadata=aq_type("short"))
 
 
 @attr.s(frozen=True, slots=True)
@@ -308,16 +305,16 @@ class ChannelClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=_type("short"))
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
 
     #: The class of the method that caused this close.
-    class_id: int = attr.ib(metadata=_type("short"))
+    class_id: int = attr.ib(metadata=aq_type("short"))
 
     #: The class of the method that caused this close.
-    method_id: int = attr.ib(metadata=_type("short"))
+    method_id: int = attr.ib(metadata=aq_type("short"))
 
 
 @attr.s(frozen=True, slots=True)
@@ -344,7 +341,7 @@ class QueueDeclarePayload(MethodPayload):
     method = 10
     is_client_side = False
 
-    reserved_1: int = attr.ib(metadata=_type("short"))
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
 
     #: The name of the queue being declared. May be empty.
     name: str = attr.ib()
@@ -382,10 +379,36 @@ class QueueDeclareOkPayload(MethodPayload):
     name: str = attr.ib()
 
     #: The number of the messages present in the queue.
-    message_count: int = attr.ib(metadata=_type("long"))
+    message_count: int = attr.ib(metadata=aq_type("long"))
 
     #: The number of consumers consuming from the queue.
-    consumer_count: int = attr.ib(metadata=_type("long"))
+    consumer_count: int = attr.ib(metadata=aq_type("long"))
+
+
+## BASIC ##
+class BasicPublishPayload(MethodPayload):
+    """
+    Payload for the ``publish`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 40
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the exchange to publish the data to.
+    name: str = attr.ib()
+
+    #: The routing key to use.
+    routing_key: str = attr.ib()
+
+    #: If True, the server will return a Return message if the message is unrouteable.
+    mandatory: bool = attr.ib()
+
+    #: If True, the server will return a Return message if the message cannot be sent to a consumer
+    #: immediately.
+    immediate: bool = attr.ib()
 
 
 PAYLOAD_TYPES = {
@@ -437,32 +460,7 @@ def deserialise_payload(body: bytes) -> MethodPayload:
     buffer = DecodingBuffer(rest)
 
     for field in fields:
-        # check type and decode match
-        field_type = get_origin(field.type) or field.type
-
-        if field_type is str:
-            fn = buffer.read_short_string
-
-        elif field_type is bytes:
-            fn = buffer.read_long_string
-
-        elif field_type is bool:
-            fn = buffer.read_bit
-
-        elif field_type is dict:
-            fn = buffer.read_table
-
-        elif field_type is list:
-            fn = buffer.read_array
-
-        else:
-            type_ = field.metadata.get("amqp_type")
-            if not type_:  # not an amqp field, probably default field?
-                continue
-
-            fn = getattr(buffer, f"read_{type_}")
-
-        init_params[field.name] = fn()
+        init_params[field.name] = decode_attrs_attribute(buffer, field)
 
     return payload_klass(**init_params)  # type: ignore
 
@@ -480,33 +478,7 @@ def serialise_payload(payload: MethodPayload) -> bytes:
     buf = EncodingBuffer()
     fields = attr.fields(typ)
     for field in fields:
-        field_type = get_origin(field.type) or field.type
-
-        if field_type is str:
-            fn = buf.write_short_string
-
-        elif field_type is bytes:
-            fn = buf.write_long_string
-
-        elif field_type is bool:
-            fn = buf.write_bit
-
-        elif field_type is dict:
-            fn = buf.write_table
-
-        elif field_type is list:
-            # todo
-            raise NotImplementedError("list types")
-
-        else:
-            type_ = field.metadata.get("amqp_type")
-            if not type_:  # not an amqp field, probably default field?
-                continue
-
-            fn = getattr(buf, f"write_{type_}")
-
-        value = getattr(payload, field.name)
-        fn(value)
+        encode_attrs_attribute(buf, field, getattr(payload, field.name))
 
     buf.force_write_bits()
     return header + buf.get_data()
