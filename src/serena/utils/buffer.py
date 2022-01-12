@@ -405,11 +405,15 @@ class EncodingBuffer(object):
         Writes a single bit to the buffer.
         """
 
-        if self._last_bit_offset >= 8:
-            self._write(b"")  # forces a bit write
+        if self._table_mode:
+            self._write(b"t")
+            self._write(struct.pack(">B", value))
         else:
-            self._last_bit_data = (self._last_bit_data << 1) & value
-            self._last_bit_offset += 1
+            if self._last_bit_offset >= 8:
+                self._write(b"")  # forces a bit write
+            else:
+                self._last_bit_data = (self._last_bit_data << 1) & value
+                self._last_bit_offset += 1
 
     def force_write_bits(self):
         """
@@ -426,7 +430,12 @@ class EncodingBuffer(object):
         if self._table_mode:
             self._write(b"F")
 
-        self.write_long_string(buf.get_data())
+        # write long string manually, as `write_long_string` writes an extraneous long string
+        # field value if this is a nested table
+        data = buf.get_data()
+        size = struct.pack(">I", len(data))
+        self._write(size)
+        self._write(data)
 
     def start_writing_table(self) -> ContextManager[TableWriter]:
         """
@@ -474,7 +483,11 @@ class TableWriter(EncodingBuffer):
 
         self.write_key(key)
 
-        if isinstance(value, int):
+        if isinstance(value, bool):
+            self.write_bit(value)
+            self.force_write_bits()
+
+        elif isinstance(value, int):
             bl = value.bit_length()
             if bl <= 32:
                 self.write_long(value)
