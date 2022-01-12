@@ -15,8 +15,8 @@ from typing import AsyncContextManager, Dict, Optional, Union
 
 import anyio
 import attr
-from anyio import BrokenResourceError, CancelScope, ClosedResourceError
-from anyio.abc import ByteStream
+from anyio import BrokenResourceError, CancelScope, ClosedResourceError, sleep, Lock
+from anyio.abc import ByteStream, TaskGroup
 from anyio.lowlevel import checkpoint
 
 from serena.channel import Channel
@@ -44,7 +44,7 @@ from serena.payloads.method import (
     StartOkPayload,
     StartPayload,
     TuneOkPayload,
-    TunePayload,
+    TunePayload, BasicDeliverPayload,
 )
 from serena.utils.bitset import BitSet
 
@@ -147,7 +147,7 @@ class AMQPConnection(object):
         # mapping of channel id -> Channel
         self._channel_channels: Dict[int, Channel] = {}
 
-        self._close_event = anyio.Event()
+        self._write_lock = Lock()
 
         # statistics
         self._heartbeat_stats = HeartbeatStatistics()
@@ -179,13 +179,20 @@ class AMQPConnection(object):
             if frame is not NEED_DATA:
                 return frame
 
+    # bleh, this is just a hotfix for data contention. i could probably fix this by driving the
+    # writer with a background task writer, but that seems like it would achieve the exact same
+    # thing...?
+    async def _send(self, data: bytes):
+        async with self._write_lock:
+            await self._sock.send(data)
+
     async def _send_method_frame(self, channel: int, payload: MethodPayload):
         """
         Sends a single method frame.
         """
 
         data = self._parser.write_method_frame(channel, payload)
-        await self._sock.send(data)
+        await self._send(data)
 
     async def _send_header_frame(
         self,
@@ -200,7 +207,7 @@ class AMQPConnection(object):
         """
 
         data = self._parser.write_header_frame(channel, method_klass, body_length, headers)
-        await self._sock.send(data)
+        await self._send(data)
 
     async def _send_body_frames(self, channel: int, body: bytes):
         """
@@ -209,7 +216,7 @@ class AMQPConnection(object):
 
         data = self._parser.write_body_frames(channel, body, max_frame_size=self._max_frame_size)
         for frame in data:
-            await self._sock.send(frame)
+            await self._send(frame)
 
     async def _close_ungracefully(self):
         """
@@ -233,7 +240,7 @@ class AMQPConnection(object):
         logger.debug("Sending AMQP handshake...")
 
         open_message = b"AMQP\x00\x00\x09\x01"
-        await self._sock.send(open_message)
+        await self._send(open_message)
 
         while True:
             incoming_frame = await self._read_single_frame()
@@ -435,17 +442,30 @@ class AMQPConnection(object):
         threshold = channel.max_buffer_size - 1
         # simple case
         if channel.current_buffer_size < threshold:
-            return await channel._internal_enqueue(frame)
+            return await channel._enqueue_delivery(frame)
 
         # complex case
         raise NotImplementedError("complex case not implemented yet")
+
+    async def _heartbeat_loop(self):
+        """
+        Sends heartbeats to the AMQP server.
+        """
+
+        if self._heartbeat_interval == 0:
+            return
+
+        while True:
+            # heartbeat frame
+            await self._send(b"\x08\x00\x00\x00\x00\x00\x00\xCE")
+            await sleep(self._heartbeat_interval / 2)
 
     async def _listen_for_messages(self):
         """
         Listens for messages infinitely. This is the primary driving loop of the connection.
         """
 
-        while not self._closed:
+        while not (self._closed or self._server_requested_close):
             try:
                 with anyio.fail_after(self._actual_heartbeat_interval):
                     frame = await self._read_single_frame()
@@ -471,6 +491,7 @@ class AMQPConnection(object):
             elif frame.type == FrameType.METHOD:
                 assert isinstance(frame, MethodFrame)
 
+                # intercept control frames, e.g. close payloads
                 channel = frame.channel_id
                 if channel == 0:
                     await self._handle_control_frame(frame)  # type: ignore
@@ -479,14 +500,38 @@ class AMQPConnection(object):
                 # we intercept certain control frames
                 # channelcloseok is handled here because channels can't deal with their own closure
                 # (as they don't know when they finish)
+                channel_object = self._channel_channels[channel]
 
-                if isinstance(frame.payload, ChannelCloseOkPayload):
+                if isinstance(frame.payload, (ChannelClosePayload, ChannelCloseOkPayload)):
+                    is_unclean = isinstance(frame, ChannelClosePayload)
+
                     self._channels[channel] = False
                     self._channel_channels.pop(channel)
+                    await channel_object._close(frame.payload if is_unclean else None)
+
+                    # ack the close
+                    # todo: should this be here?
+                    if is_unclean:
+                        await self._send_method_frame(0, ChannelCloseOkPayload())
+
                     continue
 
-                channel_object = self._channel_channels[channel]
-                await self._enqueue_frame(channel_object, frame)
+                elif isinstance(frame.payload, BasicDeliverPayload):
+                    # requires special logic
+                    await self._enqueue_frame(channel_object, frame)
+
+                else:
+                    # just delivery normally
+                    await channel_object._enqueue_regular(frame)
+
+    def _start_tasks(self, nursery: TaskGroup):
+        """
+        Starts the background tasks for this connection.
+        """
+        self._cancel_scope = nursery.cancel_scope
+        nursery.start_soon(self._listen_for_messages)
+        nursery.start_soon(self._heartbeat_loop)
+        #nursery.start_soon(self._flow_handler)
 
     async def _close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         if self._closed:
@@ -560,6 +605,8 @@ class AMQPConnection(object):
     async def close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         """
         Closes the connection. This method is idempotent.
+
+        There's no real reason to call this method.
 
         :param reply_code: The code to send when closing.
         :param reply_text: The text to send when replying.
@@ -648,8 +695,7 @@ def open_connection(
 
         try:
             async with anyio.create_task_group() as nursery:
-                conn._cancel_scope = nursery.cancel_scope
-                nursery.start_soon(conn._listen_for_messages)
+                conn._start_tasks(nursery)
                 yield conn
         finally:
             await conn.close()

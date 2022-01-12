@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Type
+from typing import Type, Union
 
 from serena.enums import ReplyCode
-from serena.payloads.method import ClosePayload, MethodPayload, method_payload_name
+from serena.payloads.method import ClosePayload, MethodPayload, method_payload_name, \
+    ChannelClosePayload
 
 
 class AMQPError(Exception):
@@ -47,13 +48,13 @@ class InvalidPayloadTypeError(AMQPStateError):
 
 class UnexpectedCloseError(AMQPError):
     """
-    Thrown when the connection closes unexpectedly.
+    Thrown when the connection or a channeel closes unexpectedly.
     """
 
     __slots__ = ("reply_code", "reply_message", "class_id", "method_id")
 
     @classmethod
-    def of(cls, payload: ClosePayload) -> UnexpectedCloseError:
+    def of(cls, payload: Union[ClosePayload, ChannelClosePayload]) -> UnexpectedCloseError:
         """
         Creates a new :class:`.UnexpectedCloseError` from a close payload.
         """

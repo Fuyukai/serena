@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Type, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Dict, Type, TypeVar, cast, Optional
 
 import anyio
-from anyio import Event, Lock
+from anyio import Event, Lock, EndOfStream, ClosedResourceError
 
+from serena.exc import AMQPStateError, UnexpectedCloseError
 from serena.frame import Frame
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
@@ -14,7 +15,7 @@ from serena.payloads.method import (
     MethodPayload,
     QueueDeclareOkPayload,
     QueueDeclarePayload,
-    method_payload_name,
+    method_payload_name, ChannelClosePayload,
 )
 
 if TYPE_CHECKING:
@@ -40,13 +41,28 @@ class Channel(object):
         self._channel_id = channel_id
         self._open = False
 
-        self._send, self._receive = anyio.create_memory_object_stream(
+        # no buffer as these are for events that should return immediately
+        self._send, self._receive = anyio.create_memory_object_stream(0)
+
+        self._delivery_send, self._delivery_receive = anyio.create_memory_object_stream(
             max_buffer_size=stream_buffer_size
         )
 
-        self._recv_wakeup = Event()
+        self._close_info: Optional[ChannelClosePayload] = None
 
+        self._recv_wakeup = Event()
         self._lock = Lock()
+
+        # internal state used by the connection
+        # server requested a flow stop
+        self._server_flow_stopped = False
+        # we requested a flow stop
+        self._client_flow_stopped = False
+
+    def __str__(self):
+        return f"<Channel id={self.id} buffered={self.current_buffer_size}>"
+
+    __repr__ = __str__
 
     @property
     def id(self) -> int:
@@ -70,7 +86,7 @@ class Channel(object):
         Returns the maximum number of frames buffered in this channel. Used internally.
         """
 
-        return int(self._send.statistics().max_buffer_size)
+        return int(self._delivery_send.statistics().max_buffer_size)
 
     @property
     def current_buffer_size(self) -> int:
@@ -78,17 +94,55 @@ class Channel(object):
         Returns the current number of frames buffered in this channel. Used internally.
         """
 
-        return self._send.statistics().current_buffer_used
+        return self._delivery_send.statistics().current_buffer_used
 
-    async def _internal_enqueue(self, frame: Frame):
+    def _check_closed(self):
+        """
+        Checks if the channel is closed.
+        """
+
+        if not self._open:
+            # todo: switch to our own exception?
+            raise ClosedResourceError("This channel is closed")
+
+    async def _close(self, payload: ChannelClosePayload):
+        """
+        Closes this channel.
+        """
+
+        await self._receive.aclose()
+        await self._delivery_receive.aclose()
+        self._open = False
+        self._close_info = payload
+
+    async def _enqueue_regular(self, frame: MethodFrame):
+        """
+        Enqueues a regular method frame.
+        """
+
         await self._send.send(frame)
+
+    async def _enqueue_delivery(self, frame: Frame):
+        """
+        Enqueues a delivery frame.
+        """
+
+        await self._delivery_send.send(frame)
 
     async def _receive_frame(self) -> Frame:
         """
         Receives a single frame from the channel.
         """
 
-        frame = await self._receive.receive()
+        self._check_closed()
+
+        try:
+            frame = await self._receive.receive()
+        except EndOfStream:
+            if self._close_info is None:
+                raise AMQPStateError("Channel was closed improperly")
+
+            raise UnexpectedCloseError.of(self._close_info) from None
 
         # notify connection code that we received an event so it can unblock the channel
         # noinspection PyAsyncCall
@@ -159,6 +213,8 @@ class Channel(object):
 
         # TODO: Expose the other two parameters of QueueDeclareOk.
 
+        self._check_closed()
+
         payload = QueueDeclarePayload(
             reserved_1=0,
             name=name or "",
@@ -180,7 +236,7 @@ class Channel(object):
         body: bytes,
         *,
         header: BasicHeader = None,
-        mandatory: bool = False,
+        mandatory: bool = True,
         immediate: bool = False,
     ):
         """
@@ -200,6 +256,8 @@ class Channel(object):
 
         # this is slightly different as the server doesn't (normally) respond, and we have to send
         # manual frames.
+
+        self._check_closed()
 
         async with self._lock:
             method_payload = BasicPublishPayload(
@@ -223,3 +281,4 @@ class Channel(object):
 
             # 3) body
             await self._connection._send_body_frames(self._channel_id, body)
+

@@ -416,6 +416,32 @@ class BasicPublishPayload(MethodPayload):
     immediate: bool = attr.ib()
 
 
+class BasicDeliverPayload(MethodPayload):
+    """
+    Payload for the ``deliver`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 60
+    is_client_side = True
+
+    #: The identifier for the consumer.
+    consumer_tag: str = attr.ib()
+
+    #: The server-assigned delivery tag.
+    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
+
+    #: Indicates that the message has been previously delivered.
+    redelivered: bool = attr.ib()
+
+    #: The name of the exchange the message was originally published to.
+    exchange_name: str = attr.ib()
+
+    #: The routing key for the message.
+    routing_key: str = attr.ib()
+
+
+
 PAYLOAD_TYPES = {
     ClassID.CONNECTION: {
         StartPayload.method: StartPayload,
@@ -443,6 +469,7 @@ PAYLOAD_TYPES = {
     },
     ClassID.BASIC: {
         BasicPublishPayload.method: BasicPublishPayload,
+        BasicDeliverPayload.method: BasicDeliverPayload,
     },
 }
 
