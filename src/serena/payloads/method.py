@@ -408,12 +408,12 @@ class BasicPublishPayload(MethodPayload):
     #: The routing key to use.
     routing_key: str = attr.ib()
 
-    #: If True, the server will return a Return message if the message is unrouteable.
-    mandatory: bool = attr.ib()
-
     #: If True, the server will return a Return message if the message cannot be sent to a consumer
     #: immediately.
     immediate: bool = attr.ib()
+
+    #: If True, the server will return a Return message if the message is unrouteable.
+    mandatory: bool = attr.ib()
 
 
 class BasicDeliverPayload(MethodPayload):
@@ -439,7 +439,6 @@ class BasicDeliverPayload(MethodPayload):
 
     #: The routing key for the message.
     routing_key: str = attr.ib()
-
 
 
 PAYLOAD_TYPES = {

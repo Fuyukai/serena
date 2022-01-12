@@ -252,6 +252,11 @@ class Channel(object):
                           could not be routed to a queue.
         :param immediate: Iff True, the server must return a ``Return`` message if the message could
                           not be immediately consumed.
+
+        .. warning::
+
+            The immediate flag is *not* supported in RabbitMQ 3.x, and will cause the connection
+            to close.
         """
 
         # this is slightly different as the server doesn't (normally) respond, and we have to send
