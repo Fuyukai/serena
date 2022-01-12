@@ -3,8 +3,12 @@ from __future__ import annotations
 from typing import Type, Union
 
 from serena.enums import ReplyCode
-from serena.payloads.method import ClosePayload, MethodPayload, method_payload_name, \
-    ChannelClosePayload
+from serena.payloads.method import (
+    ChannelClosePayload,
+    ClosePayload,
+    MethodPayload,
+    method_payload_name,
+)
 
 
 class AMQPError(Exception):

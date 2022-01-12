@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Type, TypeVar, cast, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar, cast
 
 import anyio
-from anyio import Event, Lock, EndOfStream, ClosedResourceError
+from anyio import ClosedResourceError, EndOfStream, Event, Lock
 
 from serena.exc import AMQPStateError, UnexpectedCloseError
 from serena.frame import Frame
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
     BasicPublishPayload,
+    ChannelClosePayload,
     ChannelOpenOkPayload,
     MethodFrame,
     MethodPayload,
     QueueDeclareOkPayload,
     QueueDeclarePayload,
-    method_payload_name, ChannelClosePayload,
+    method_payload_name,
 )
 
 if TYPE_CHECKING:
@@ -286,4 +287,3 @@ class Channel(object):
 
             # 3) body
             await self._connection._send_body_frames(self._channel_id, body)
-
