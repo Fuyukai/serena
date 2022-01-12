@@ -412,7 +412,7 @@ class EncodingBuffer(object):
             if self._last_bit_offset >= 8:
                 self._write(b"")  # forces a bit write
             else:
-                self._last_bit_data = (self._last_bit_data << 1) & value
+                self._last_bit_data = (self._last_bit_data << 1) | value
                 self._last_bit_offset += 1
 
     def force_write_bits(self):
