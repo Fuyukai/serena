@@ -15,13 +15,14 @@ from typing import AsyncContextManager, Dict, Optional, Union
 
 import anyio
 import attr
-from anyio import BrokenResourceError, CancelScope, ClosedResourceError, sleep, Lock
+from anyio import BrokenResourceError, CancelScope, ClosedResourceError, Lock, sleep
 from anyio.abc import ByteStream, TaskGroup
 from anyio.lowlevel import checkpoint
 
 from serena.channel import Channel
 from serena.enums import ReplyCode
 from serena.exc import (
+    AMQPError,
     AMQPStateError,
     InvalidPayloadTypeError,
     InvalidProtocolError,
@@ -31,6 +32,7 @@ from serena.frame import Frame, FrameType
 from serena.frameparser import NEED_DATA, FrameParser
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
+    BasicDeliverPayload,
     ChannelCloseOkPayload,
     ChannelClosePayload,
     ChannelOpenPayload,
@@ -44,7 +46,7 @@ from serena.payloads.method import (
     StartOkPayload,
     StartPayload,
     TuneOkPayload,
-    TunePayload, BasicDeliverPayload,
+    TunePayload,
 )
 from serena.utils.bitset import BitSet
 
@@ -133,12 +135,12 @@ class AMQPConnection(object):
 
         self._closed = False
         self._server_requested_close = False
-        # info
         self._close_info: Optional[ClosePayload] = None
 
-        # what we
+        # negotiated data
         self._actual_heartbeat_interval = 0
         self._max_frame_size = 0
+        self._server_capabilites = {}
 
         # list of 64-bit ints (as not to overflow long values and cause a bigint)
         # that is used to assign the next channel ID
@@ -163,8 +165,15 @@ class AMQPConnection(object):
             "capabilites": {
                 "publisher_confirms": True,
                 "basic.nack": True,
-            }
+            },
         }
+
+    def has_capability(self, name: str) -> bool:
+        """
+        Checks if the server exposes a capability.
+        """
+
+        return self._server_capabilites.get(name, False)
 
     async def _read_single_frame(self) -> Frame:
         """
@@ -275,7 +284,14 @@ class AMQPConnection(object):
                 version = payload.properties["version"].decode(encoding="utf-8")
                 logger.debug(f"Connected to {product} v{version} ({platform})")
 
-                # caps = payload.properties["capabilities"]
+                caps: Dict[str, bool] = payload.properties["capabilities"]
+
+                # this is the only capability we require
+                if not caps.get("publisher_confirms", False):
+                    raise AMQPError("Server does not support publisher confirms, which we require")
+
+                self._server_capabilites = caps
+
                 if "PLAIN" not in mechanisms:
                     # we only speak plain (for now...)
                     await self.close()
@@ -374,6 +390,11 @@ class AMQPConnection(object):
         """
         Closes a channel.
         """
+
+        if self._server_requested_close:
+            logger.warning(f"Server requested close without closing channel #{id}")
+            # TODO: Should this be a cancel shielded checkpoint?
+            return
 
         frame = ChannelClosePayload(
             reply_code=ReplyCode.success, reply_text="Normal close", class_id=0, method_id=0
@@ -602,8 +623,7 @@ class AMQPConnection(object):
             try:
                 yield channel
             finally:
-                if not (self._closed or self._server_requested_close):
-                    await self._close_channel(channel.id)
+                await self._close_channel(channel.id)
 
         return cm()
 
