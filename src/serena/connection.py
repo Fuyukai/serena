@@ -157,9 +157,13 @@ class AMQPConnection(object):
         version = importlib.metadata.version("serena")
 
         return {
-            "product": "Serena AMQP client",
-            "platform": f"Python {sys.version}",
-            "version": version,
+            "product": "Serena AMQP client".encode("utf-8"),
+            "platform": f"Python {sys.version}".encode("utf-8"),
+            "version": version.encode("utf-8"),
+            "capabilites": {
+                "publisher_confirms": True,
+                "basic.nack": True,
+            }
         }
 
     async def _read_single_frame(self) -> Frame:
@@ -271,6 +275,7 @@ class AMQPConnection(object):
                 version = payload.properties["version"].decode(encoding="utf-8")
                 logger.debug(f"Connected to {product} v{version} ({platform})")
 
+                # caps = payload.properties["capabilities"]
                 if "PLAIN" not in mechanisms:
                     # we only speak plain (for now...)
                     await self.close()
@@ -531,7 +536,7 @@ class AMQPConnection(object):
         self._cancel_scope = nursery.cancel_scope
         nursery.start_soon(self._listen_for_messages)
         nursery.start_soon(self._heartbeat_loop)
-        #nursery.start_soon(self._flow_handler)
+        # nursery.start_soon(self._flow_handler)
 
     async def _close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         if self._closed:
