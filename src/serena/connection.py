@@ -469,8 +469,9 @@ class AMQPConnection(object):
         count = threshold - channel.current_buffer_size
         # simple case
         if count > 1:
-            logger.debug(f"Enqueueing frame on channel {channel.id}, {count} frames left in the "
-                         f"buffer")
+            logger.debug(
+                f"Enqueueing frame on channel {channel.id}, {count} frames left in the buffer"
+            )
             return await channel._enqueue_delivery(frame)
 
         # complex case

@@ -153,7 +153,7 @@ class FrameParser(object):
         frames = []
 
         for i in range(0, frames_needed):
-            frame_body = body[max_frame_size * i: max_frame_size * (i + 1)]
+            frame_body = body[max_frame_size * i : max_frame_size * (i + 1)]
             frame = FrameParser._pack_frame(BODY_FRAME, channel, frame_body)
             logger.trace(
                 f"C{channel}->S FRAME (BODY): {i + 1} / {frames_needed} ({len(frame_body)} bytes)"
@@ -180,7 +180,7 @@ class FrameParser(object):
         if self._processing_partial_packet:
             body, self._buffer = (
                 self._buffer[: self._bytes_remaining],
-                self._buffer[self._bytes_remaining:],
+                self._buffer[self._bytes_remaining :],
             )
             self._last_packet_buffer += body
             self._bytes_remaining -= len(body)
@@ -210,15 +210,15 @@ class FrameParser(object):
             type_ = self._buffer[0]
             channel = (self._buffer[1] << 8) | self._buffer[2]
             size = (
-                       self._buffer[3] << 24
-                       | self._buffer[4] << 16
-                       | self._buffer[5] << 8
-                       | self._buffer[6]
-                   ) + 1  # + 1 is for the frame end byte (0xCE)
+                self._buffer[3] << 24
+                | self._buffer[4] << 16
+                | self._buffer[5] << 8
+                | self._buffer[6]
+            ) + 1  # + 1 is for the frame end byte (0xCE)
 
             logger.trace(f"Received packet ({type_=} | {channel=} | {size=})")
 
-            body, self._buffer = self._buffer[7: size + 7], self._buffer[size + 7:]
+            body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7 :]
 
             if len(body) < size:
                 # missing part of the packet, save and return later
