@@ -114,6 +114,7 @@ class HeartbeatStatistics:
         self.cur_heartbeat_time = datetime.now(timezone.utc).astimezone()
 
 
+# noinspection PyProtectedMember
 class AMQPConnection(object):
     """
     A single AMQP connection.
@@ -298,7 +299,6 @@ class AMQPConnection(object):
                     await self._send_method_frame(0, close_ok)
                 finally:
                     raise UnexpectedCloseError.of(incoming_frame.payload)
-
 
             if state == AMQPState.INITIAL:
                 payload = incoming_frame.payload

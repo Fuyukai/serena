@@ -19,7 +19,6 @@ async def test_connection_opening():
     assert not conn.open
 
 
-
 @pytest.mark.slow
 async def test_heartbeat_intervals():
     """
@@ -54,4 +53,3 @@ async def test_bad_authentication():
             pass
 
     assert e.value.reply_code == ReplyCode.access_refused
-

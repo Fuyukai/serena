@@ -15,5 +15,3 @@ async def test_channel_opening():
             assert channel.open
 
         assert not channel.open
-
-

@@ -1,4 +1,4 @@
-from serena.frameparser import FrameParser, NEED_DATA
+from serena.frameparser import NEED_DATA, FrameParser
 from serena.payloads.method import MethodFrame
 
 data = (

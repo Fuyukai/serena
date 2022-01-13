@@ -189,8 +189,9 @@ class FrameParser(object):
             self._bytes_remaining -= len(body)
 
             if self._bytes_remaining > 0:
-                logger.trace(f"Still missing {self._bytes_remaining} bytes from packet, skipping "
-                             f"cycle")
+                logger.trace(
+                    f"Still missing {self._bytes_remaining} bytes from packet, skipping cycle"
+                )
                 return NEED_DATA
 
             # truncate frame-end octet
