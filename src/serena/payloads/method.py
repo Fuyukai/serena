@@ -599,7 +599,7 @@ class BasicGetOkPayload(MethodPayload):
     routing_key: str = attr.ib()
 
     #: The message count remaining for the queue.
-    message_count: int = attr.ib(metadata=aq_type("longlong"))
+    message_count: int = attr.ib(metadata=aq_type("long"))
 
 
 @attr.s(frozen=True, slots=True)
