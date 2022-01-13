@@ -38,3 +38,14 @@ class HeartbeatFrame(Frame):
     """
 
     type = FrameType.HEARTBEAT
+
+
+@attr.s(frozen=True, slots=True)
+class BodyFrame(Frame):
+    """
+    A single body frame.
+    """
+
+    type = FrameType.BODY
+
+    data: bytes = attr.ib()

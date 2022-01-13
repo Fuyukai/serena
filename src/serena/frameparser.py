@@ -5,8 +5,13 @@ import struct
 from math import ceil
 from typing import List, Union
 
-from serena.frame import Frame, HeartbeatFrame
-from serena.payloads.header import BasicHeader, serialise_basic_header
+from serena.frame import BodyFrame, Frame, HeartbeatFrame
+from serena.payloads.header import (
+    BasicHeader,
+    ContentHeaderFrame,
+    deserialise_basic_header,
+    serialise_basic_header,
+)
 from serena.payloads.method import (
     ClassID,
     MethodFrame,
@@ -55,7 +60,8 @@ class FrameParser(object):
         self._bytes_remaining = -1
         self._last_packet_buffer = bytearray()
 
-    def _make_frame(self, type: int, channel: int, payload: bytes) -> Frame:
+    @staticmethod
+    def _make_frame(type: int, channel: int, payload: bytes) -> Frame:
         """
         Creates a new frame object.
         """
@@ -70,10 +76,18 @@ class FrameParser(object):
             return frame
 
         elif type == HEADER_FRAME:
-            raise NotImplementedError("header frames")
+            decoded_payload = deserialise_basic_header(payload)
+            logger.trace(
+                f"S#{channel}->C FRAME (HEADER): {decoded_payload.class_id.name} ("
+                f"{len(payload)} bytes)"
+            )
+            frame = ContentHeaderFrame(channel_id=channel, payload=decoded_payload)
+            return frame
 
         elif type == BODY_FRAME:
-            raise NotImplementedError("body frames")
+            logger.trace(f"S#{channel}->C FRAME (BODY): {len(payload)} bytes")
+            frame = BodyFrame(channel_id=channel, data=payload)
+            return frame
 
         elif type == HEARTBEAT_FRAME:
             assert channel == 0, "heartbeats cannot be on any channel other than zero"
@@ -139,7 +153,7 @@ class FrameParser(object):
         frames = []
 
         for i in range(0, frames_needed):
-            frame_body = body[max_frame_size * i : max_frame_size * (i + 1)]
+            frame_body = body[max_frame_size * i: max_frame_size * (i + 1)]
             frame = FrameParser._pack_frame(BODY_FRAME, channel, frame_body)
             logger.trace(
                 f"C{channel}->S FRAME (BODY): {i + 1} / {frames_needed} ({len(frame_body)} bytes)"
@@ -166,7 +180,7 @@ class FrameParser(object):
         if self._processing_partial_packet:
             body, self._buffer = (
                 self._buffer[: self._bytes_remaining],
-                self._buffer[self._bytes_remaining :],
+                self._buffer[self._bytes_remaining:],
             )
             self._last_packet_buffer += body
             self._bytes_remaining -= len(body)
@@ -196,15 +210,16 @@ class FrameParser(object):
             type_ = self._buffer[0]
             channel = (self._buffer[1] << 8) | self._buffer[2]
             size = (
-                self._buffer[3] << 24
-                | self._buffer[4] << 16
-                | self._buffer[5] << 8
-                | self._buffer[6]
-            ) + 1  # + 1 is for the frame end byte (0xCE)
+                       self._buffer[3] << 24
+                       | self._buffer[4] << 16
+                       | self._buffer[5] << 8
+                       | self._buffer[6]
+                   ) + 1  # + 1 is for the frame end byte (0xCE)
 
             logger.trace(f"Received packet ({type_=} | {channel=} | {size=})")
 
-            body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7 :]
+            body, self._buffer = self._buffer[7: size + 7], self._buffer[size + 7:]
+
             if len(body) < size:
                 # missing part of the packet, save and return later
                 self._processing_partial_packet = True
@@ -216,4 +231,7 @@ class FrameParser(object):
                 logger.trace(f"Missing {self._bytes_remaining} bytes from packet, skipping cycle")
                 return NEED_DATA
             else:
+                assert body[-1] == 0xCE, "invalid frame-end octet"
+                body = body[:-1]
+
                 return self._make_frame(type_, channel, body)

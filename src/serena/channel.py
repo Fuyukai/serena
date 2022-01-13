@@ -1,14 +1,32 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar, cast
+import logging
+from contextlib import aclosing, asynccontextmanager
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    AsyncContextManager,
+    AsyncIterable,
+    Dict,
+    Optional,
+    Type,
+    TypeVar,
+    cast,
+)
 
 import anyio
-from anyio import ClosedResourceError, EndOfStream, Event, Lock
+from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
+from anyio.lowlevel import checkpoint
 
 from serena.exc import AMQPStateError, UnexpectedCloseError
-from serena.frame import Frame
-from serena.payloads.header import BasicHeader
+from serena.frame import BodyFrame, Frame
+from serena.message import AMQPMessage
+from serena.payloads.header import BasicHeader, ContentHeaderFrame, ContentHeaderPayload
 from serena.payloads.method import (
+    BasicCancelPayload,
+    BasicConsumeOkPayload,
+    BasicConsumePayload,
+    BasicDeliverPayload,
     BasicPublishPayload,
     ChannelClosePayload,
     ChannelOpenOkPayload,
@@ -23,6 +41,8 @@ if TYPE_CHECKING:
     from serena.connection import AMQPConnection
 
 _PAYLOAD = TypeVar("_PAYLOAD", bound=MethodPayload)
+
+logger = logging.getLogger()
 
 
 # noinspection PyProtectedMember
@@ -59,6 +79,8 @@ class Channel(object):
         self._server_flow_stopped = False
         # we requested a flow stop
         self._client_flow_stopped = False
+
+        # used to decompose
 
     def __str__(self):
         return f"<Channel id={self.id} buffered={self.current_buffer_size}>"
@@ -116,6 +138,9 @@ class Channel(object):
         self._open = False
         self._close_info = payload
 
+        # aclose doesn't seem to checkpoint...
+        await checkpoint()
+
     async def _enqueue_regular(self, frame: MethodFrame):
         """
         Enqueues a regular method frame.
@@ -129,6 +154,59 @@ class Channel(object):
         """
 
         await self._delivery_send.send(frame)
+
+    async def _receive_delivery_message(self):
+        """
+        Receives a single delivery message. This will reassemble a full message into its constituent
+        frames.
+        """
+
+        method = None
+        headers = None
+        body = b""
+
+        while True:
+            # check for successful reassembly first
+            if headers is not None and len(body) >= headers.payload.full_size:
+                await checkpoint()
+                # hehe payload.payload
+                return AMQPMessage(
+                    envelope=method.payload,
+                    header=headers.payload.payload,
+                    body=body,
+                )
+
+            next_frame = await self._delivery_receive.receive()
+
+            if method is None:
+                if not isinstance(next_frame, MethodFrame):
+                    raise AMQPStateError(f"Expected a method frame, got {next_frame} instead")
+
+                if not isinstance(next_frame.payload, BasicDeliverPayload):
+                    raise AMQPStateError(
+                        f"Expected basic.deliver, got {next_frame.payload} instead"
+                    )
+
+                method = next_frame
+
+            elif headers is None:
+                if not isinstance(next_frame, ContentHeaderFrame):
+                    raise AMQPStateError(f"Expected a header frame, got {next_frame} instead")
+
+                # explicit type hint as pycharm incorrectly infers based on the previous if check
+                payload: ContentHeaderPayload = next_frame.payload  # type: ignore
+                if payload.class_id != method.payload.klass:
+                    raise AMQPStateError(
+                        f"Class mismatch ({payload.class_id} != {method.payload.klass})"
+                    )
+
+                headers = next_frame
+
+            else:
+                if not isinstance(next_frame, BodyFrame):
+                    raise AMQPStateError(f"Expected a body frame, got {next_frame} instead")
+
+                body += next_frame.data
 
     async def _receive_frame(self) -> Frame:
         """
@@ -287,3 +365,63 @@ class Channel(object):
 
             # 3) body
             await self._connection._send_body_frames(self._channel_id, body)
+
+    def basic_consume(
+        self,
+        queue_name: str,
+        consumer_tag: str = "",
+        *,
+        no_local: bool = False,
+        no_ack: bool = False,
+        exclusive: bool = False,
+        arguments: Dict[str, Any] = None,
+    ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
+        """
+        Starts a basic consume operation. This returns an async context manager over an asynchronous
+        iterator that yields incoming :class:`.AMQPMessage` instances.
+
+        The channel can still be used for other operations during this operation.
+
+        :param queue_name: The name of the queue to consume from.
+        :param consumer_tag: The tag for this consume.
+        :param no_local: If True, messages will not be sent to this consumer if it is on the same
+                         connection that published them.
+        :param no_ack: If True, messages will not be expected to be acknowledged. This can cause
+                       data loss.
+        :param exclusive: If True, then only this consumer can access the queue. Will fail if there
+                          is another consumer already active.
+        :param arguments: Implementation-specific arguments.
+        """
+
+        async def _agen():
+            while True:
+                yield (await self._receive_delivery_message())
+
+        @asynccontextmanager
+        async def _do():
+            payload = BasicConsumePayload(
+                reserved_1=0,
+                queue_name=queue_name,
+                consumer_tag=consumer_tag,
+                no_local=no_local,
+                no_ack=no_ack,
+                exclusive=exclusive,
+                no_wait=False,
+                arguments=arguments or {},
+            )
+
+            response = await self._send_and_receive_frame(payload, BasicConsumeOkPayload)
+
+            try:
+                async with aclosing(_agen()) as agen:
+                    yield agen
+            finally:
+                cancel_payload = BasicCancelPayload(
+                    consumer_tag=response.payload.consumer_tag,
+                    no_wait=False,
+                )
+
+                with CancelScope(shield=True):
+                    await self._send_and_receive_frame(cancel_payload)
+
+        return _do()

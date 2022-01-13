@@ -466,8 +466,11 @@ class AMQPConnection(object):
         #    causes a lot of unnecessary network traffic.
 
         threshold = channel.max_buffer_size - 1
+        count = threshold - channel.current_buffer_size
         # simple case
-        if channel.current_buffer_size < threshold:
+        if count > 1:
+            logger.debug(f"Enqueueing frame on channel {channel.id}, {count} frames left in the "
+                         f"buffer")
             return await channel._enqueue_delivery(frame)
 
         # complex case
@@ -549,6 +552,12 @@ class AMQPConnection(object):
                 else:
                     # just delivery normally
                     await channel_object._enqueue_regular(frame)
+
+            elif frame.type == FrameType.HEADER or frame.type == FrameType.BODY:
+                channel = frame.channel_id
+                assert channel != 0, "header frame cannot happen on control channel"
+                channel_object = self._channel_channels[channel]
+                await self._enqueue_frame(channel_object, frame)
 
     def _start_tasks(self, nursery: TaskGroup):
         """
