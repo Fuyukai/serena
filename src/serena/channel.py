@@ -195,7 +195,13 @@ class Channel(object):
                     body=body,
                 )
 
-            next_frame = await self._delivery_receive.receive()
+            try:
+                next_frame = await self._delivery_receive.receive()
+            except EndOfStream:
+                if self._close_info is None:
+                    raise AMQPStateError("Channel was closed improperly")
+
+                raise UnexpectedCloseError.of(self._close_info) from None
 
             if method is None:
                 if not isinstance(next_frame, MethodFrame):
@@ -257,12 +263,10 @@ class Channel(object):
 
         frame = await self._receive.receive()
         if not isinstance(frame, MethodFrame):
-            raise ValueError(f"Expected MethodFrame, got {frame}")
+            raise AMQPStateError(f"Expected MethodFrame, got {frame}")
 
         if not isinstance(frame.payload, ChannelOpenOkPayload):
-            raise ValueError(
-                f"Expected ChannelOpenOkPayload, got {method_payload_name(frame.payload)}"
-            )
+            raise InvalidPayloadTypeError(ChannelOpenOkPayload, frame.payload)
 
         self._open = True
 

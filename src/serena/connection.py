@@ -673,8 +673,10 @@ class AMQPConnection(object):
             try:
                 yield channel
             finally:
-                channel._closed = True
-                await self._close_channel(channel.id)
+                # don't try and re-close the channel if the channel was closed server-side
+                if not channel._closed:
+                    channel._closed = True
+                    await self._close_channel(channel.id)
 
         return cm()
 

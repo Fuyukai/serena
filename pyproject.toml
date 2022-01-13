@@ -36,9 +36,14 @@ source = ["serena"]
 
 [tool.coverage.report]
 exclude_lines = [
+    # standard tthings
     "pragma: no cover",
     "def __repr__",
     "if TYPE_CHECKING:",
+
+    # these are only used if the server is really fucking up and so don't matter.
+    "raise AMQPStateError",
+    "raise InvalidPayloadTypeError",
 ]
 
 [build-system]
