@@ -35,6 +35,26 @@ class AMQPStateError(AMQPError):
     __slots__ = ()
 
 
+class MessageReturnedError(AMQPError):
+    """
+    Thrown when a message is returned unexpectedly.
+    """
+
+    def __init__(self, reply_code: ReplyCode, reply_text: str, exchange: str, routing_key: str):
+        self.reply_code = reply_code
+        self.reply_text = reply_text
+        self.exchange = exchange
+        self.routing_key = routing_key
+
+    def __str__(self):
+        msg = (
+            f"Message with routing key {self.routing_key} was returned from {self.exchange}: "
+            f"{self.reply_code.name}: {self.reply_text}"
+        )
+
+    __repr__ = __str__
+
+
 class InvalidPayloadTypeError(AMQPStateError):
     """
     Thrown when a payload's type is invalid.

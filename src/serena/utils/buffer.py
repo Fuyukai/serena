@@ -100,14 +100,14 @@ class DecodingBuffer(object):
         Reads a single signed long long (8-byte) from the stream.
         """
 
-        return self._unpack("l")[0]
+        return self._unpack("q")[0]
 
     def read_longlong(self) -> int:
         """
         Reads a single long-long (8-byte) from the stream.
         """
 
-        return self._unpack("L")[0]
+        return self._unpack("Q")[0]
 
     def read_short_string(self) -> str:
         """

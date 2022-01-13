@@ -33,12 +33,16 @@ from serena.frameparser import NEED_DATA, FrameParser
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
     BasicDeliverPayload,
+    BasicQOSOkPayload,
+    BasicQOSPayload,
     ChannelCloseOkPayload,
     ChannelClosePayload,
     ChannelOpenPayload,
     ClassID,
     CloseOkPayload,
     ClosePayload,
+    ConfirmSelectOkPayload,
+    ConfirmSelectPayload,
     ConnectionOpenOkPayload,
     ConnectionOpenPayload,
     MethodFrame,
@@ -120,11 +124,13 @@ class AMQPConnection(object):
         *,
         heartbeat_interval: int = 60,
         channel_buffer_size: int = 64,  # reasonable default
+        desired_frame_size: int = 131072,
     ):
         """
         :param stream: The :class:`.ByteStream` to use.
         :param heartbeat_interval: The heartbeat interval to negotiate with, in seconds.
         :param channel_buffer_size: The buffer size for channel messages.
+        :param desired_frame_size: The maximum body message frame size desired.
         """
 
         self._sock = stream
@@ -137,9 +143,11 @@ class AMQPConnection(object):
         self._server_requested_close = False
         self._close_info: Optional[ClosePayload] = None
 
+        self._is_rabbitmq = False
+
         # negotiated data
         self._actual_heartbeat_interval = 0
-        self._max_frame_size = 0
+        self._max_frame_size = desired_frame_size
         self._server_capabilites = {}
 
         # list of 64-bit ints (as not to overflow long values and cause a bigint)
@@ -165,6 +173,8 @@ class AMQPConnection(object):
             "capabilites": {
                 "publisher_confirms": True,
                 "basic.nack": True,
+                "authentication_failure_close": True,
+                "per_consumer_qos": True,
             },
         }
 
@@ -228,6 +238,11 @@ class AMQPConnection(object):
         """
 
         data = self._parser.write_body_frames(channel, body, max_frame_size=self._max_frame_size)
+
+        if not data:
+            await checkpoint()
+            return
+
         for frame in data:
             await self._send(frame)
 
@@ -255,7 +270,7 @@ class AMQPConnection(object):
         open_message = b"AMQP\x00\x00\x09\x01"
         await self._send(open_message)
 
-        while True:
+        while not self._closed:
             incoming_frame = await self._read_single_frame()
             # this can *never* reasonably happen during the handshake
             assert isinstance(incoming_frame, MethodFrame), "incoming frame was not a method???"
@@ -267,7 +282,6 @@ class AMQPConnection(object):
             if state == AMQPState.INITIAL:
                 payload = incoming_frame.payload
                 if not isinstance(payload, StartPayload):
-                    # todo make specific exception
                     await self.close()
                     raise InvalidPayloadTypeError(StartPayload, payload)
 
@@ -281,6 +295,10 @@ class AMQPConnection(object):
 
                 platform = payload.properties["platform"].decode(encoding="utf-8")
                 product = payload.properties["product"].decode(encoding="utf-8")
+                if product == "RabbitMQ":
+                    logger.debug("Enabling RabbitMQ-specific code paths...")
+                    self._is_rabbitmq = True
+
                 version = payload.properties["version"].decode(encoding="utf-8")
                 logger.debug(f"Connected to {product} v{version} ({platform})")
 
@@ -290,7 +308,13 @@ class AMQPConnection(object):
                 if not caps.get("publisher_confirms", False):
                     raise AMQPError("Server does not support publisher confirms, which we require")
 
+                if not caps.get("per_consumer_qos"):
+                    logger.warning("Server does not have per-consumer QOS")
+
                 self._server_capabilites = caps
+                for cap, value in self._server_capabilites.items():
+                    if value:
+                        logger.trace(f"Server supports capability {cap}")
 
                 if "PLAIN" not in mechanisms:
                     # we only speak plain (for now...)
@@ -324,7 +348,7 @@ class AMQPConnection(object):
                     self._channels = BitSet(wanted_channel_size)
                     self._channels[0] = True
 
-                    wanted_frame_size = min(payload.max_frame_size, 131072)
+                    wanted_frame_size = min(payload.max_frame_size, self._max_frame_size)
                     logger.debug(
                         f"Server asks for {payload.max_frame_size}B frame sizes, "
                         f"we're asking for {wanted_frame_size}B frame sizes"
@@ -384,6 +408,17 @@ class AMQPConnection(object):
             tg.start_soon(partial(self._send_method_frame, idx, open))
             await channel_object._wait_until_open()
 
+        # enable qos and select
+        qos = BasicQOSPayload(
+            prefetch_size=0,
+            prefetch_count=self._channel_buffer_size // 3,  # METHOD, HEADER, BODY
+            global_=False,
+        )
+        await channel_object._send_and_receive_frame(qos, BasicQOSOkPayload)
+
+        select = ConfirmSelectPayload(no_wait=False)
+        await channel_object._send_and_receive_frame(select, ConfirmSelectOkPayload)
+
         return channel_object
 
     async def _close_channel(self, id: int):
@@ -419,63 +454,39 @@ class AMQPConnection(object):
 
     async def _enqueue_frame(self, channel: Channel, frame: Frame):
         """
-        Enqueues a frame onto the channel object. This will automatically disable the channel flow
-        if the buffer size is too small.
+        Enqueues a frame onto the channel object.
 
         :param channel: The channel to handle.
         :param frame: The frame to handle.
         """
 
-        # Backpressure management is very complex, so here's a general gist of how it works.
-        # The general problem is that on our side, a Trio-level (when I say trio, I mean anyio)
-        # channel has a fixed buffer size and trying to add to a channel when the buffer is full
-        # will cause the sender to block until the receiver takes an item. This causes
-        # *backpressure*.
-        # This is a desired behaviour as it avoids producers filling memory with items when a
-        # receiver can't process them fast enough.
-        #
-        # The problem is that AMQP is multiplexed, which means there's multiple connections
-        # running over one connection via channels. This means that if the sender blocks trying
-        # to write new frames to channel X, then all items on channel Y (and Y..N) are also
-        # blocked until the consumer eats something and the networking code continues a loop.
-        # If the consumer never runs, this causes a deadlock.
-        #
-        # However, AMQP has a feature where we can disable the flow of messages on a particular
-        # channel, whilst still allowing messages to flow on other channels. This is allowed on
-        # both the server side and client side, but as the server side handling is drastically
-        # simpler it'll be explained in the Channel class.
-        #
-        # For the client side, we automatically disable the flow of messages when the buffer is
-        # about to be full (this is subject to change). This follows a several step process:
-        #
-        # 1) First, we check the buffer size.
-        # 2a) If it's less than one below the maximum, we add the frame to the buffer and return.
-        #     This is the simplest and easiest case.
-        # 2b) If it's one below the maximum, then we once again add the frame to the buffer,
-        #     but don't return; we have to then disable the channel.
-        # 3) To disable the channel, we send a flow message synchronously to the server. As this is
-        #    happening in the same context as the network receiver, no new messages are received
-        #    during this loop.
-        # 4) Then, we have to listen out for when the channel is ready to receive messages again.
-        #    This is achieved by an event that is set on the channel class whenever a frame is
-        #    *fully* processed, which is listened to by a task running in a separate nursery.
-        # 5) The task in the other nursery checks the buffer size each time the event is set;
-        #    when it is *half* of the maximum size, a new Flow message is sent to unblock the
-        #    channel. This avoids the case where new messages constantly arrive and overflow the
-        #    channel, causing a Flow to be sent, then it's immediately reset after one message and
-        #    causes a lot of unnecessary network traffic.
+        # pfft, there used to be a whole doc comment about enabling/disabling flows but turns out
+        # i can't read and there's just a qos() method.
 
         threshold = channel.max_buffer_size - 1
         count = threshold - channel.current_buffer_size
         # simple case
-        if count > 1:
+        if count >= 1:
             logger.debug(
                 f"Enqueueing frame on channel {channel.id}, {count} frames left in the buffer"
             )
             return await channel._enqueue_delivery(frame)
 
         # complex case
-        raise NotImplementedError("complex case not implemented yet")
+        logger.critical(
+            f"!!! CHANNEL {channel.id} IS ABOUT TO BLOCK: This WILL cause a deadlock !!!"
+        )
+        logger.critical("The most likely cause is too large messages!")
+        logger.critical(
+            "You *must* adjust your desired frame size on both the client and the "
+            "server, raise the channel buffer, or have faster consumers."
+        )
+        logger.critical(
+            f"Current frame size is {self._max_frame_size}, and the current buffer "
+            f"size is {self._channel_buffer_size}."
+        )
+        logger.debug(f"Enqueuing frame on blocked channel {channel.id}")
+        return await channel._enqueue_delivery(frame)
 
     async def _heartbeat_loop(self):
         """
@@ -567,7 +578,6 @@ class AMQPConnection(object):
         self._cancel_scope = nursery.cancel_scope
         nursery.start_soon(self._listen_for_messages)
         nursery.start_soon(self._heartbeat_loop)
-        # nursery.start_soon(self._flow_handler)
 
     async def _close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         if self._closed:
@@ -731,7 +741,11 @@ def open_connection(
         try:
             async with anyio.create_task_group() as nursery:
                 conn._start_tasks(nursery)
-                yield conn
+                try:
+                    yield conn
+                finally:
+                    # noinspection PyAsyncCall
+                    nursery.cancel_scope.cancel()
         finally:
             await conn.close()
 

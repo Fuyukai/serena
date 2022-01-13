@@ -15,19 +15,26 @@ from typing import (
 )
 
 import anyio
-from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
+from anyio import CancelScope, ClosedResourceError, EndOfStream, Lock
 from anyio.lowlevel import checkpoint
 
-from serena.exc import AMQPStateError, UnexpectedCloseError
+from serena.exc import (
+    AMQPStateError,
+    InvalidPayloadTypeError,
+    MessageReturnedError,
+    UnexpectedCloseError,
+)
 from serena.frame import BodyFrame, Frame
 from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader, ContentHeaderFrame, ContentHeaderPayload
 from serena.payloads.method import (
+    BasicAckPayload,
     BasicCancelPayload,
     BasicConsumeOkPayload,
     BasicConsumePayload,
     BasicDeliverPayload,
     BasicPublishPayload,
+    BasicReturnPayload,
     ChannelClosePayload,
     ChannelOpenOkPayload,
     MethodFrame,
@@ -70,17 +77,14 @@ class Channel(object):
         )
 
         self._close_info: Optional[ChannelClosePayload] = None
-
-        self._recv_wakeup = Event()
         self._lock = Lock()
 
         # internal state used by the connection
         # server requested a flow stop
         self._server_flow_stopped = False
-        # we requested a flow stop
-        self._client_flow_stopped = False
 
-        # used to decompose
+        # used to count acks
+        self._message_counter = 0
 
     def __str__(self):
         return f"<Channel id={self.id} buffered={self.current_buffer_size}>"
@@ -171,6 +175,7 @@ class Channel(object):
                 await checkpoint()
                 # hehe payload.payload
                 return AMQPMessage(
+                    channel=self,
                     envelope=method.payload,
                     header=headers.payload.payload,
                     body=body,
@@ -208,7 +213,7 @@ class Channel(object):
 
                 body += next_frame.data
 
-    async def _receive_frame(self) -> Frame:
+    async def _receive_frame(self) -> MethodFrame:
         """
         Receives a single frame from the channel.
         """
@@ -225,8 +230,6 @@ class Channel(object):
 
         # notify connection code that we received an event so it can unblock the channel
         # noinspection PyAsyncCall
-        self._recv_wakeup.set()
-        self._recv_wakeup = Event()
         return frame
 
     async def _wait_until_open(self):
@@ -245,6 +248,14 @@ class Channel(object):
 
         self._open = True
 
+    async def _send_single_frame(self, payload: MethodPayload):
+        """
+        Sends a single frame to the connection. This won't wait for a response.
+        """
+
+        async with self._lock:
+            await self._connection._send_method_frame(self._channel_id, payload)
+
     async def _send_and_receive_frame(
         self, payload: MethodPayload, type: Type[_PAYLOAD] = None
     ) -> MethodFrame[_PAYLOAD]:
@@ -258,7 +269,11 @@ class Channel(object):
 
         async with self._lock:
             await self._connection._send_method_frame(self._channel_id, payload)
-            return cast(MethodFrame[type], await self._receive_frame())
+            result = await self._receive_frame()
+            if type is not None and not isinstance(result.payload, type):
+                raise InvalidPayloadTypeError(type, result.payload)
+
+            return cast(MethodFrame[type], result)
 
     ## METHODS ##
     async def queue_declare(
@@ -338,8 +353,7 @@ class Channel(object):
             to close.
         """
 
-        # this is slightly different as the server doesn't (normally) respond, and we have to send
-        # manual frames.
+        # we have to send three manual frames before we get an ACK
 
         self._check_closed()
 
@@ -365,6 +379,29 @@ class Channel(object):
 
             # 3) body
             await self._connection._send_body_frames(self._channel_id, body)
+            self._message_counter += 1
+
+            # 4) wait for Ack or Return
+            response = await self._receive_frame()
+            payload = response.payload
+
+            if isinstance(payload, BasicAckPayload):
+                if payload.delivery_tag != self._message_counter:
+                    raise AMQPStateError(
+                        f"Expected Ack for delivery tag {self._message_counter}, "
+                        f"but got Ack for delivery tag {payload.delivery_tag}"
+                    )
+                logger.trace(f"C#{self.id}: Server ACKed published message")
+
+                return
+
+            elif isinstance(payload, BasicReturnPayload):
+                raise MessageReturnedError(
+                    exchange=payload.exchange,
+                    routing_key=payload.routing_key,
+                    reply_code=payload.reply_code,
+                    reply_text=payload.reply_text,
+                )
 
     def basic_consume(
         self,

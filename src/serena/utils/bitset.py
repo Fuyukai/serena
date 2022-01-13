@@ -38,9 +38,3 @@ class BitSet(object):
         index = self._get_index(item)
         bit_idx = item % 64
         return (self._items[index] & (1 << bit_idx)) != 0
-
-
-if __name__ == "__main__":
-    b = BitSet(128)
-    b[1] = True
-    print(b[0])

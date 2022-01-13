@@ -73,6 +73,12 @@ class BasicHeader:
     #: The reply-to field.
     reply_to: Optional[str] = attr.ib(default=None, kw_only=True)
 
+    #: The expiration of this message.
+    expiration: Optional[str] = attr.ib(default=None, kw_only=True)
+
+    #: The application-specific message ID of this message.
+    message_id: Optional[str] = attr.ib(default=None, kw_only=True)
+
     #: The message timestamp.
     timestamp: Optional[int] = attr.ib(default=None, kw_only=True, metadata=aq_type("longlong"))
 

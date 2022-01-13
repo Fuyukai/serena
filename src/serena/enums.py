@@ -1,6 +1,20 @@
 import enum
 
 
+class ClassID(enum.IntEnum):
+    """
+    Enumeration of method class IDs.
+    """
+
+    CONNECTION = 10
+    CHANNEL = 20
+    EXCHANGE = 40
+    QUEUE = 50
+    BASIC = 60
+    CONFIRM = 85
+    TX = 90
+
+
 class ReplyCode(enum.IntEnum):
     """
     Enumeration of possible AMQP reply codes.

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import abc
-import enum
 from typing import Any, ClassVar, Dict, Generic, TypeVar
 
 import attr
 
-from serena.enums import ReplyCode
+from serena.enums import ClassID, ReplyCode
 from serena.frame import Frame, FrameType
 from serena.payloads.encoding import (
     aq_type,
@@ -14,19 +13,6 @@ from serena.payloads.encoding import (
     encode_attrs_attribute,
 )
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
-
-
-class ClassID(enum.IntEnum):
-    """
-    Enumeration of method class IDs.
-    """
-
-    CONNECTION = 10
-    CHANNEL = 20
-    EXCHANGE = 40
-    QUEUE = 50
-    BASIC = 60
-    TX = 90
 
 
 @attr.s(frozen=True, slots=True, init=True)
@@ -391,55 +377,36 @@ class QueueDeclareOkPayload(MethodPayload):
 
 ## BASIC ##
 @attr.s(frozen=True, slots=True)
-class BasicPublishPayload(MethodPayload):
+class BasicQOSPayload(MethodPayload):
     """
-    Payload for the ``publish`` method.
+    Payload for the ``qos`` method.
     """
 
     klass = ClassID.BASIC
-    method = 40
+    method = 10
     is_client_side = False
 
-    reserved_1: int = attr.ib(metadata=aq_type("short"))
+    #: The prefetch size, in octets.
+    prefetch_size: int = attr.ib(metadata=aq_type("long"))
 
-    #: The name of the exchange to publish the data to.
-    name: str = attr.ib()
+    #: The prefetch count, in messages.
+    prefetch_count: int = attr.ib(metadata=aq_type("short"))
 
-    #: The routing key to use.
-    routing_key: str = attr.ib()
-
-    #: If True, the server will return a Return message if the message cannot be sent to a consumer
-    #: immediately.
-    immediate: bool = attr.ib()
-
-    #: If True, the server will return a Return message if the message is unrouteable.
-    mandatory: bool = attr.ib()
+    #: If this is a global QOS, or a per-channel one.
+    global_: bool = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
-class BasicDeliverPayload(MethodPayload):
+class BasicQOSOkPayload(MethodPayload):
     """
-    Payload for the ``deliver`` method.
+    Payload for the ``qos-ok`` method.
     """
 
     klass = ClassID.BASIC
-    method = 60
+    method = 11
     is_client_side = True
 
-    #: The identifier for the consumer.
-    consumer_tag: str = attr.ib()
-
-    #: The server-assigned delivery tag.
-    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
-
-    #: Indicates that the message has been previously delivered.
-    redelivered: bool = attr.ib()
-
-    #: The name of the exchange the message was originally published to.
-    exchange_name: str = attr.ib()
-
-    #: The routing key for the message.
-    routing_key: str = attr.ib()
+    # empty body
 
 
 @attr.s(frozen=True, slots=True)
@@ -487,7 +454,7 @@ class BasicConsumeOkPayload(MethodPayload):
 @attr.s(frozen=True, slots=True)
 class BasicCancelPayload(MethodPayload):
     """
-    Payload for the ``cancel`` payload.
+    Payload for the ``cancel`` method.
     """
 
     klass = ClassID.BASIC
@@ -504,7 +471,7 @@ class BasicCancelPayload(MethodPayload):
 @attr.s(frozen=True, slots=True)
 class BasicCancelOkPayload(MethodPayload):
     """
-    Payload for the ``cancel-ok`` payload.
+    Payload for the ``cancel-ok`` method.
     """
 
     klass = ClassID.BASIC
@@ -513,6 +480,126 @@ class BasicCancelOkPayload(MethodPayload):
 
     #: The consumer tag being cancelled.
     consumer_tag: str = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class BasicPublishPayload(MethodPayload):
+    """
+    Payload for the ``publish`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 40
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the exchange to publish the data to.
+    name: str = attr.ib()
+
+    #: The routing key to use.
+    routing_key: str = attr.ib()
+
+    #: If True, the server will return a Return message if the message cannot be sent to a consumer
+    #: immediately.
+    immediate: bool = attr.ib()
+
+    #: If True, the server will return a Return message if the message is unrouteable.
+    mandatory: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class BasicReturnPayload(MethodPayload):
+    """
+    Payload for the ``return`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 50
+    is_client_side = True
+
+    #: The code for the error that caused this message to be returned.
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))
+
+    #: The text for the error that caused this message to be returned.
+    reply_text: str = attr.ib()
+
+    #: The name of the exchange this was returned from.
+    exchange: str = attr.ib()
+
+    #: The message routing key.
+    routing_key: str = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class BasicDeliverPayload(MethodPayload):
+    """
+    Payload for the ``deliver`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 60
+    is_client_side = True
+
+    #: The identifier for the consumer.
+    consumer_tag: str = attr.ib()
+
+    #: The server-assigned delivery tag.
+    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
+
+    #: Indicates that the message has been previously delivered.
+    redelivered: bool = attr.ib()
+
+    #: The name of the exchange the message was originally published to.
+    exchange_name: str = attr.ib()
+
+    #: The routing key for the message.
+    routing_key: str = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class BasicAckPayload(MethodPayload):
+    """
+    Payload for the ``ack`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 80
+    is_client_side = True
+
+    #: The server-assigned delivery tag.
+    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
+
+    #: If True, the delivery tag is set to "up to and including".
+    multiple: bool = attr.ib()
+
+
+## CONFIRM (RabbitMQ extension) ##
+@attr.s(frozen=True, slots=True)
+class ConfirmSelectPayload(MethodPayload):
+    """
+    Payload for the ``select`` method.
+    """
+
+    klass = ClassID.CONFIRM
+    method = 10
+    is_client_side = False
+
+    #: If set, the server should not respond.
+    no_wait: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class ConfirmSelectOkPayload(MethodPayload):
+    """
+    Payload for the ``select-ok`` method.
+    """
+
+    klass = ClassID.CONFIRM
+    method = 11
+    is_client_side = True
+
+    # empty body
 
 
 PAYLOAD_TYPES = {
@@ -547,6 +634,13 @@ PAYLOAD_TYPES = {
         BasicConsumeOkPayload.method: BasicConsumeOkPayload,
         BasicCancelPayload.method: BasicCancelPayload,
         BasicCancelOkPayload.method: BasicCancelOkPayload,
+        BasicQOSPayload.method: BasicQOSPayload,
+        BasicQOSOkPayload.method: BasicQOSOkPayload,
+        BasicAckPayload.method: BasicAckPayload,
+    },
+    ClassID.CONFIRM: {
+        ConfirmSelectPayload.method: ConfirmSelectPayload,
+        ConfirmSelectOkPayload.method: ConfirmSelectOkPayload,
     },
 }
 
@@ -565,7 +659,11 @@ def deserialise_payload(body: bytes) -> MethodPayload:
         body[4:],
     )
 
-    payload_klass = PAYLOAD_TYPES[klass][method]
+    try:
+        payload_klass = PAYLOAD_TYPES[klass][method]
+    except KeyError:
+        raise KeyError(f"Unknown method: {klass}/{method}") from None
+
     attr.resolve_types(payload_klass)
     fields = attr.fields(payload_klass)
     init_params = {}

@@ -149,6 +149,9 @@ class FrameParser(object):
         Writes a set of body frames into a set of byte strings.
         """
 
+        if len(body) <= 0:
+            return []
+
         frames_needed = ceil(len(body) / max_frame_size)
         frames = []
 
