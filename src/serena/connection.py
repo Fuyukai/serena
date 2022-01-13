@@ -304,13 +304,15 @@ class AMQPConnection(object):
 
             if state == AMQPState.INITIAL:
                 payload = incoming_frame.payload
-                if not isinstance(payload, StartPayload):
-                    await self.close()
+
+                if not isinstance(payload, StartPayload):  # pragma: no cover
+                    await self._close_ungracefully()
                     raise InvalidPayloadTypeError(StartPayload, payload)
 
                 version = (payload.version_major, payload.version_minor)
-                if version != (0, 9):
-                    await self.close()
+
+                if version != (0, 9):  # pragma: no cover
+                    await self._close_ungracefully()
                     raise InvalidProtocolError(f"Expected AMQP 0-9-1, but server speaks {version}")
 
                 mechanisms = set(payload.mechanisms.decode(encoding="utf-8").split(" "))
@@ -318,7 +320,7 @@ class AMQPConnection(object):
 
                 platform = payload.properties["platform"].decode(encoding="utf-8")
                 product = payload.properties["product"].decode(encoding="utf-8")
-                if product == "RabbitMQ":
+                if product == "RabbitMQ":  # pragma: no cover
                     logger.debug("Enabling RabbitMQ-specific code paths...")
                     self._is_rabbitmq = True
 
@@ -328,20 +330,17 @@ class AMQPConnection(object):
                 caps: Dict[str, bool] = payload.properties["capabilities"]
 
                 # this is the only capability we require
-                if not caps.get("publisher_confirms", False):
+                if not caps.get("publisher_confirms", False):  # pragma: no cover
                     raise AMQPError("Server does not support publisher confirms, which we require")
-
-                if not caps.get("per_consumer_qos"):
-                    logger.warning("Server does not have per-consumer QOS")
 
                 self._server_capabilites = caps
                 for cap, value in self._server_capabilites.items():
                     if value:
                         logger.trace(f"Server supports capability {cap}")
 
-                if "PLAIN" not in mechanisms:
+                if "PLAIN" not in mechanisms:  # pragma: no cover
                     # we only speak plain (for now...)
-                    await self.close()
+                    await self._close_ungracefully()
                     raise AMQPStateError(
                         f"Expected PLAIN authentication method, but we only have {mechanisms}"
                     )
@@ -396,7 +395,7 @@ class AMQPConnection(object):
                     open = ConnectionOpenPayload(virtual_host=vhost)
                     await self._send_method_frame(0, open)
                     state = AMQPState.RECEIVED_TUNE
-                else:
+                else:  # pragma: no cover
                     raise InvalidPayloadTypeError(TunePayload, payload)
 
             elif state == AMQPState.RECEIVED_TUNE:
@@ -406,7 +405,7 @@ class AMQPConnection(object):
                     logger.info("AMQP connection is ready to go")
                     state = AMQPState.READY
                     break
-                else:
+                else:  # pragma: no cover
                     raise InvalidPayloadTypeError(ConnectionOpenOkPayload, payload)
 
     async def _open_channel(self):
