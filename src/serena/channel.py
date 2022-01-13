@@ -282,7 +282,7 @@ class Channel(object):
 
         :param payload: The :class:`.MethodPayload` to send.
         :param type: The type of the expected payload to return.
-        :return: A :class:`.MethodFrame` that was returned as a result.
+        :return: A :class:`.kMethodFrame` that was returned as a result.
         """
 
         async with self._lock:

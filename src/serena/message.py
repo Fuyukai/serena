@@ -126,4 +126,4 @@ class AMQPMessage:
         Rejects this message. See :class:`~.Channel.basic_reject`.
         """
 
-        return await self._channel.basic_nack(self.envelope.delivery_tag, requeue=requeue)
+        return await self._channel.basic_reject(self.envelope.delivery_tag, requeue=requeue)

@@ -662,11 +662,11 @@ class BasicNackPayload(MethodPayload):
     #: The server-assigned delivery tag.
     delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
 
-    #: If True, the delivery tag is set to "up to and including".
-    multiple: bool = attr.ib()
-
     #: If True, the message should be re-queued.
     requeue: bool = attr.ib()
+
+    #: If True, the delivery tag is set to "up to and including".
+    multiple: bool = attr.ib()
 
 
 ## CONFIRM (RabbitMQ extension) ##

@@ -64,3 +64,25 @@ async def test_consumption():
             queue = await channel.queue_declare(name=queue.name, passive=True)
             assert queue.message_count == 0
             assert len(messages) == 10
+
+
+async def test_acks():
+    """
+    Tests message acknowledgement.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        async with conn.open_channel() as channel:
+            queue = await channel.queue_declare(name="", exclusive=True)
+            await channel.basic_publish("", routing_key=queue.name, body=b"test")
+
+            # very cool amqp feature is that reject() will just get the server to immediately
+            # requeue it.
+            msg = await channel.basic_get(queue.name)
+            assert msg is not None
+            await msg.reject(requeue=True)
+
+            assert (await channel.queue_declare(name=queue.name, passive=True)).message_count == 1
+            msg = await channel.basic_get(queue.name)
+            await msg.ack()
+            assert (await channel.queue_declare(name=queue.name, passive=True)).message_count == 0
