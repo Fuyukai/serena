@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import enum
 import importlib.metadata
 import logging
@@ -170,13 +171,21 @@ class AMQPConnection(object):
             "product": "Serena AMQP client".encode("utf-8"),
             "platform": f"Python {sys.version}".encode("utf-8"),
             "version": version.encode("utf-8"),
-            "capabilites": {
+            "capabilities": {
                 "publisher_confirms": True,
                 "basic.nack": True,
                 "authentication_failure_close": True,
                 "per_consumer_qos": True,
             },
         }
+
+    @property
+    def open(self) -> bool:
+        """
+        Checks if this connection is actually open.
+        """
+
+        return not self._closed and not self._server_requested_close
 
     def has_capability(self, name: str) -> bool:
         """
@@ -185,10 +194,18 @@ class AMQPConnection(object):
 
         return self._server_capabilites.get(name, False)
 
+    def heartbeat_statistics(self) -> HeartbeatStatistics:
+        """
+        Returns a copy of the heartbeat statistics for this connection.
+        """
+
+        return copy.copy(self._heartbeat_stats)
+
     async def _read_single_frame(self) -> Frame:
         """
         Reads a single frame from the AMQP connection.
         """
+
         frame = self._parser.next_frame()
         if frame is not NEED_DATA:
             await checkpoint()
@@ -270,14 +287,18 @@ class AMQPConnection(object):
         open_message = b"AMQP\x00\x00\x09\x01"
         await self._send(open_message)
 
-        while not self._closed:
+        while self.open:
             incoming_frame = await self._read_single_frame()
             # this can *never* reasonably happen during the handshake
             assert isinstance(incoming_frame, MethodFrame), "incoming frame was not a method???"
 
             if isinstance(incoming_frame.payload, ClosePayload):
-                await self._handle_control_frame(frame=incoming_frame)
-                continue
+                close_ok = CloseOkPayload()
+                try:
+                    await self._send_method_frame(0, close_ok)
+                finally:
+                    raise UnexpectedCloseError.of(incoming_frame.payload)
+
 
             if state == AMQPState.INITIAL:
                 payload = incoming_frame.payload
@@ -448,9 +469,11 @@ class AMQPConnection(object):
             logger.info("Server requested close...")
             self._server_requested_close = True
             self._close_info = payload
-            # cancel our worker tasks
-            # noinspection PyAsyncCall
-            self._cancel_scope.cancel()
+            # cancel our worker tasks if needed
+
+            if self._cancel_scope is not None:
+                # noinspection PyAsyncCall
+                self._cancel_scope.cancel()
 
     async def _enqueue_frame(self, channel: Channel, frame: Frame):
         """
@@ -637,12 +660,16 @@ class AMQPConnection(object):
         :return: An asynchronous context manager that will open a new channel.
         """
 
+        if not self.open:
+            raise RuntimeError("The connection is not open")
+
         @asynccontextmanager
         async def cm():
             channel = await self._open_channel()
             try:
                 yield channel
             finally:
+                channel._closed = True
                 await self._close_channel(channel.id)
 
         return cm()

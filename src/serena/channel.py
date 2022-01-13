@@ -69,7 +69,14 @@ class Channel(object):
 
         self._connection = connection
         self._channel_id = channel_id
+
+        # Why is there both an `_open` and a `_closed`?
+        # `_open` is True between ChannelOpenOk, and ChannelCloseOk, and is mostly just used for
+        #  internal bookkeeping.
+        # `_closed` is False when the ``async with`` block exits.
+
         self._open = False
+        self._closed = False
 
         # no buffer as these are for events that should return immediately
         self._send, self._receive = anyio.create_memory_object_stream(0)
@@ -107,7 +114,7 @@ class Channel(object):
         Returns if this channel is open or not.
         """
 
-        return self._open
+        return self._open and not self._closed
 
     @property
     def max_buffer_size(self) -> int:
@@ -130,7 +137,7 @@ class Channel(object):
         Checks if the channel is closed.
         """
 
-        if not self._open:
+        if self._closed:
             # todo: switch to our own exception?
             raise ClosedResourceError("This channel is closed")
 
@@ -141,7 +148,7 @@ class Channel(object):
 
         await self._receive.aclose()
         await self._delivery_receive.aclose()
-        self._open = False
+        self._closed = True
         self._close_info = payload
 
         # aclose doesn't seem to checkpoint...
