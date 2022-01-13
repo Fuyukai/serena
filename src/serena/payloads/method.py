@@ -558,6 +558,64 @@ class BasicDeliverPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
+class BasicGetPayload(MethodPayload):
+    """
+    Payload for the ``get`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 70
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the queue to get from.
+    queue_name: str = attr.ib()
+
+    #: If True, then messages will not be expected to be acknowledged.
+    no_ack: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class BasicGetOkPayload(MethodPayload):
+    """
+    Payload for the ``get-ok`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 71
+    is_client_side = True
+
+    #: The server-assigned delivery tag.
+    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
+
+    #: Indicates that the message has been previously delivered.
+    redelivered: bool = attr.ib()
+
+    #: The name of the exchange the message was originally published to.
+    exchange_name: str = attr.ib()
+
+    #: The routing key for the message.
+    routing_key: str = attr.ib()
+
+    #: The message count remaining for the queue.
+    message_count: int = attr.ib(metadata=aq_type("longlong"))
+
+
+@attr.s(frozen=True, slots=True)
+class BasicGetEmptyPayload(MethodPayload):
+    """
+    Payload for the ``get-empty`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 72
+    is_client_side = True
+
+    reserved_1: str = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
 class BasicAckPayload(MethodPayload):
     """
     Payload for the ``ack`` method.
@@ -674,6 +732,9 @@ PAYLOAD_TYPES = {
         BasicQOSPayload.method: BasicQOSPayload,
         BasicQOSOkPayload.method: BasicQOSOkPayload,
         BasicAckPayload.method: BasicAckPayload,
+        BasicGetPayload.method: BasicGetPayload,
+        BasicGetOkPayload.method: BasicGetOkPayload,
+        BasicGetEmptyPayload.method: BasicGetEmptyPayload,
     },
     ClassID.CONFIRM: {
         ConfirmSelectPayload.method: ConfirmSelectPayload,
