@@ -26,10 +26,10 @@ async def test_basic_publish():
         async with conn.open_channel() as channel:
             queue = await channel.queue_declare(name="", exclusive=True)
 
-            result = await channel.basic_get(queue)
+            result = await channel.basic_get(queue.name)
             assert result is None
-            await channel.basic_publish("", routing_key=queue, body=b"test")
-            result = await channel.basic_get(queue)
+            await channel.basic_publish("", routing_key=queue.name, body=b"test")
+            result = await channel.basic_get(queue.name)
 
             assert result is not None
             await result.ack()  # satisfy rabbitmq
