@@ -15,7 +15,6 @@ from typing import (
 )
 
 import anyio
-import attr
 from anyio import CancelScope, ClosedResourceError, EndOfStream, Lock
 from anyio.lowlevel import checkpoint
 

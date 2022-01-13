@@ -64,4 +64,3 @@ async def test_consumption():
             queue = await channel.queue_declare(name=queue.name, passive=True)
             assert queue.message_count == 0
             assert len(messages) == 10
-
