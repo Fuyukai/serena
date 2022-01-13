@@ -34,6 +34,8 @@ from serena.frameparser import NEED_DATA, FrameParser
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
     BasicDeliverPayload,
+    BasicGetEmptyPayload,
+    BasicGetOkPayload,
     BasicQOSOkPayload,
     BasicQOSPayload,
     ChannelCloseOkPayload,
@@ -580,7 +582,9 @@ class AMQPConnection(object):
 
                     continue
 
-                elif isinstance(frame.payload, BasicDeliverPayload):
+                elif isinstance(
+                    frame.payload, (BasicDeliverPayload, BasicGetOkPayload, BasicGetEmptyPayload)
+                ):
                     # requires special logic
                     await self._enqueue_frame(channel_object, frame)
 
