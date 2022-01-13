@@ -336,20 +336,20 @@ class QueueDeclarePayload(MethodPayload):
     #: The name of the queue being declared. May be empty.
     name: str = attr.ib()
 
-    #: If True, the server will return a DeclareOk if the queue exists, and an error if it doesn't.
-    passive: bool = attr.ib()
-
-    #: If True, then the queue will persist through restarts.
-    durable: bool = attr.ib()
-
-    #: If True, then the queue is exclusive to this connection.
-    exclusive: bool = attr.ib()
+    #: If True, no Declare-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
 
     #: If True, then the queue is automatically deleted when all consumers are finished using it.
     auto_delete: bool = attr.ib()
 
-    #: If True, no Declare-Ok method will be sent by the server.
-    no_wait: bool = attr.ib()
+    #: If True, then the queue is exclusive to this connection.
+    exclusive: bool = attr.ib()
+
+    #: If True, then the queue will persist through restarts.
+    durable: bool = attr.ib()
+
+    #: If True, the server will return a DeclareOk if the queue exists, and an error if it doesn't.
+    passive: bool = attr.ib()
 
     #: Implementation-specific arguments for the declaration.
     arguments: Dict[str, Any] = attr.ib()
