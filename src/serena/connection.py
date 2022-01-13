@@ -568,7 +568,8 @@ class AMQPConnection(object):
                 channel_object = self._channel_channels[channel]
 
                 if isinstance(frame.payload, (ChannelClosePayload, ChannelCloseOkPayload)):
-                    is_unclean = isinstance(frame, ChannelClosePayload)
+                    is_unclean = isinstance(frame.payload, ChannelClosePayload)
+                    logger.debug(f"Channel close received, {is_unclean=}")
 
                     self._channels[channel] = False
                     self._channel_channels.pop(channel)

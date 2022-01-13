@@ -15,6 +15,7 @@ from typing import (
 )
 
 import anyio
+import attr
 from anyio import CancelScope, ClosedResourceError, EndOfStream, Lock
 from anyio.lowlevel import checkpoint
 
@@ -151,10 +152,10 @@ class Channel(object):
         Closes this channel.
         """
 
-        await self._receive.aclose()
-        await self._delivery_receive.aclose()
-        self._closed = True
         self._close_info = payload
+        await self._send.aclose()
+        await self._delivery_send.aclose()
+        self._closed = True
 
         # aclose doesn't seem to checkpoint...
         await checkpoint()
@@ -303,7 +304,7 @@ class Channel(object):
         exclusive: bool = False,
         auto_delete: bool = False,
         arguments: Dict[str, Any] = None,
-    ):
+    ) -> QueueDeclareOkPayload:
         """
         Declares a queue.
 
@@ -320,10 +321,8 @@ class Channel(object):
                             have finished. The queue will never be deleted before the first consumer
                             starts.
         :param arguments: An optional dictionary of server implementation-specific arguments.
-        :return: The name of the declared queue.
+        :return: The :class:`.QueueDeclareOkPayload` the server returned.
         """
-
-        # TODO: Expose the other two parameters of QueueDeclareOk.
 
         self._check_closed()
 
@@ -339,7 +338,7 @@ class Channel(object):
         )
 
         result = await self._send_and_receive_frame(payload, QueueDeclareOkPayload)
-        return result.payload.name
+        return result.payload
 
     def basic_consume(
         self,

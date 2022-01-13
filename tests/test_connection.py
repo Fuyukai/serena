@@ -53,3 +53,15 @@ async def test_bad_authentication():
             pass
 
     assert e.value.reply_code == ReplyCode.access_refused
+
+
+async def test_server_side_close():
+    """
+    Tests a server-side close.
+    """
+
+    with pytest.raises(UnexpectedCloseError):
+        async with open_connection("127.0.0.1") as conn:
+            async with conn.open_channel() as channel:
+                # immediate causes a close with rabbitmq
+                await channel.basic_publish("", "", b"", immediate=True)

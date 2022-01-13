@@ -34,3 +34,34 @@ async def test_basic_publish():
             assert result is not None
             await result.ack()  # satisfy rabbitmq
             assert result.body == b"test"
+
+
+async def test_consumption():
+    """
+    Tests consuming asynchronously.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        async with conn.open_channel() as channel:
+            queue = await channel.queue_declare(name="", exclusive=True)
+
+            counter = 0
+            for i in range(0, 10):
+                await channel.basic_publish("", routing_key=queue.name, body=b"test")
+                counter += 1
+
+            messages = []
+            queue = await channel.queue_declare(name=queue.name, passive=True)
+            assert queue.message_count == 10
+
+            async with channel.basic_consume(queue_name=queue.name) as agen:
+                async for message in agen:
+                    messages.append(message)
+                    counter -= 1
+                    if counter <= 0:
+                        break
+
+            queue = await channel.queue_declare(name=queue.name, passive=True)
+            assert queue.message_count == 0
+            assert len(messages) == 10
+
