@@ -27,3 +27,26 @@ class AMQPMessage:
 
     #: The actual body of this message.
     body: bytes = attr.ib()
+
+    async def ack(self, *, multiple: bool = False):
+        """
+        Acknowledges this message. See :class:`~.Channel.basic_ack`.
+        """
+
+        return await self._channel.basic_ack(self.envelope.delivery_tag, multiple=multiple)
+
+    async def nack(self, *, multiple: bool = False, requeue: bool = True):
+        """
+        Negatively acknowledges this message. See :class:`~.Channel.basic_nack`.
+        """
+
+        return await self._channel.basic_nack(
+            self.envelope.delivery_tag, multiple=multiple, requeue=requeue
+        )
+
+    async def reject(self, *, requeue: bool = True):
+        """
+        Rejects this message. See :class:`~.Channel.basic_reject`.
+        """
+
+        return await self._channel.basic_nack(self.envelope.delivery_tag, requeue=requeue)

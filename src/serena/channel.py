@@ -33,7 +33,9 @@ from serena.payloads.method import (
     BasicConsumeOkPayload,
     BasicConsumePayload,
     BasicDeliverPayload,
+    BasicNackPayload,
     BasicPublishPayload,
+    BasicRejectPayload,
     BasicReturnPayload,
     ChannelClosePayload,
     ChannelOpenOkPayload,
@@ -323,6 +325,46 @@ class Channel(object):
         result = await self._send_and_receive_frame(payload, QueueDeclareOkPayload)
         return result.payload.name
 
+    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
+        """
+        Acknowledges AMQP messages.
+
+        :param delivery_tag: The delivery tag of the message to acknowledge.
+        :param multiple: If True, then all messages up to and including the message specified will
+                         be acknowledged, not just the message specified.
+        """
+
+        payload = BasicAckPayload(delivery_tag, multiple)
+        await self._send_single_frame(payload)
+
+    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
+        """
+        Rejects an AMQP message.
+
+        .. note::
+
+            If you are using RabbitMQ, you might want to use :meth:`~.Channel.nack` instead.
+
+        :param delivery_tag: The delivery tag of the message to acknowledge.
+        :param requeue: If True, then the rejected message will be requeued if possible.
+        """
+
+        payload = BasicRejectPayload(delivery_tag, requeue)
+        await self._send_single_frame(payload)
+
+    async def basic_nack(self, delivery_tag: int, *, multiple: bool = False, requeue: bool = False):
+        """
+        Rejects an AMQP message. This is a RabbitMQ-specific extension.
+
+        :param delivery_tag: The delivery tag of the message to acknowledge.
+        :param multiple: If True, then all messages up to and including the message specified will
+                         be acknowledged, not just the message specified.
+        :param requeue: If True, then the rejected message will be requeued if possible.
+        """
+
+        payload = BasicNackPayload(delivery_tag, multiple, requeue)
+        await self._send_single_frame(payload)
+
     async def basic_publish(
         self,
         exchange_name: str,
@@ -403,6 +445,9 @@ class Channel(object):
                     reply_text=payload.reply_text,
                 )
 
+            elif isinstance(payload, BasicNackPayload):
+                raise AMQPStateError("Server NACKed message to be published")
+
     def basic_consume(
         self,
         queue_name: str,
@@ -412,6 +457,7 @@ class Channel(object):
         no_ack: bool = False,
         exclusive: bool = False,
         arguments: Dict[str, Any] = None,
+        auto_ack: bool = True,
     ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
@@ -428,11 +474,17 @@ class Channel(object):
         :param exclusive: If True, then only this consumer can access the queue. Will fail if there
                           is another consumer already active.
         :param arguments: Implementation-specific arguments.
+        :param auto_ack: If True, then messages will be automatically positively acknowledged
+                         in the generator loop. Has no effect if ``no_ack`` is True.
         """
 
         async def _agen():
             while True:
-                yield (await self._receive_delivery_message())
+                message = await self._receive_delivery_message()
+                yield message
+
+                if auto_ack:
+                    await self.basic_ack(message.envelope.delivery_tag)
 
         @asynccontextmanager
         async def _do():

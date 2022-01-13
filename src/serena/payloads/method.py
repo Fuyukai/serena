@@ -574,6 +574,43 @@ class BasicAckPayload(MethodPayload):
     multiple: bool = attr.ib()
 
 
+@attr.s(frozen=True, slots=True)
+class BasicRejectPayload(MethodPayload):
+    """
+    Payload for the ``reject`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 90
+    is_client_side = False
+
+    #: The server-assigned delivery tag.
+    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
+
+    #: If True, the message should be re-queued.
+    requeue: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class BasicNackPayload(MethodPayload):
+    """
+    Payload for the ``nack`` method.
+    """
+
+    klass = ClassID.BASIC
+    method = 120
+    is_client_side = True
+
+    #: The server-assigned delivery tag.
+    delivery_tag: int = attr.ib(metadata=aq_type("longlong"))
+
+    #: If True, the delivery tag is set to "up to and including".
+    multiple: bool = attr.ib()
+
+    #: If True, the message should be re-queued.
+    requeue: bool = attr.ib()
+
+
 ## CONFIRM (RabbitMQ extension) ##
 @attr.s(frozen=True, slots=True)
 class ConfirmSelectPayload(MethodPayload):
