@@ -1,5 +1,11 @@
+import pytest
+
 from serena.connection import open_connection
+from serena.enums import ReplyCode
+from serena.exc import UnexpectedCloseError, MessageReturnedError
 from serena.payloads.header import BasicHeader
+
+pytestmark = pytest.mark.anyio
 
 
 async def test_basic_publish():
@@ -88,3 +94,20 @@ async def test_publishing_headers():
 
             message = await channel.basic_get(queue=queue.name, no_ack=True)
             assert message.header == headers
+
+
+async def test_return():
+    """
+    Tests message returning.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        async with conn.open_channel() as channel:
+            with pytest.raises(MessageReturnedError) as e:
+                await channel.basic_publish("", routing_key="non-existent-queue", body=b"")
+
+            # shouldn't close the channel
+            assert channel.open
+
+        assert e.value.reply_code == ReplyCode.no_route
+
