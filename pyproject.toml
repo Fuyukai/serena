@@ -15,6 +15,12 @@ anyio = "^3.5.0"
 attrs = "^21.4.0"
 "backports.strenum" = { version = "^1.1.1;", python = "<3.11" }
 
+Sphinx = { version = "^4.3.2", optional = true }
+sphinx-rtd-theme = { version = "^1.0.0", optional = true }
+sphinx-inline-tabs = { version = "^2022.1.2-beta.11", optional = true }
+sphinxcontrib-trio = { version = "^1.1.2", optional = true }
+sphinx-autodoc-typehints = { version = "^1.15.2", optional = true }
+
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 black = "^21.12b0"
@@ -22,6 +28,11 @@ isort = "^5.10.1"
 trio = "^0.19.0"
 prettyprinter = "^0.18.0"
 pytest-cov = "^3.0.0"
+
+[tool.poetry.extras]
+docs = ["Sphinx", "sphinxcontrib-trio", "sphinx-autodoc-typehints", "sphinx-rtd-theme",
+    "sphinx-inline-tabs"]
+
 
 [tool.pytest.ini_options]
 log_cli_level = "5"

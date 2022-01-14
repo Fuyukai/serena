@@ -39,4 +39,3 @@ async def test_queue_exclusive_declaration():
 
         assert conn.open
         assert e.value.reply_code == ReplyCode.not_found
-

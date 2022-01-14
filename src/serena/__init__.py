@@ -1,5 +1,13 @@
 import logging
 
+# our public exports, relatively minimal
+from serena.channel import Channel
+from serena.connection import AMQPConnection, open_connection
+from serena.enums import *
+from serena.exc import *
+from serena.message import AMQPMessage
+from serena.payloads.header import BasicHeader
+
 if not hasattr(logging.Logger, "trace"):
     # TRACE_LEVEL = 5
     logging.addLevelName(5, "TRACE")

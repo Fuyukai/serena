@@ -319,8 +319,7 @@ class Channel(object):
         Declares a new exchange.
 
         :param name: The name of the exchange. Must not be empty.
-        :param type: The type of the exchange to create. See :ref:`amqp-concepts` for more
-                     information.
+        :param type: The type of the exchange to create.
         :param passive: If True, the server will return a DeclareOk if the exchange exists, and
                         an error if it doesn't. This can be used to inspect server state without
                         modification.
@@ -544,6 +543,7 @@ class Channel(object):
                           could not be routed to a queue.
         :param immediate: Iff True, the server must return a ``Return`` message if the message could
                           not be immediately consumed.
+        :raise MessageReturnedError: If the message was returned to the publisher.
 
         .. warning::
 

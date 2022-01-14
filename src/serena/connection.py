@@ -16,19 +16,12 @@ from typing import AsyncContextManager, Dict, Optional, Union
 
 import anyio
 import attr
-from anyio import (
-    BrokenResourceError,
-    CancelScope,
-    ClosedResourceError,
-    EndOfStream,
-    Lock,
-    sleep,
-)
+from anyio import CancelScope, EndOfStream, Lock, sleep
 from anyio.abc import ByteStream, TaskGroup
 from anyio.lowlevel import checkpoint
 
 from serena.channel import Channel
-from serena.enums import ReplyCode
+from serena.enums import ClassID, ReplyCode
 from serena.exc import (
     AMQPError,
     AMQPStateError,
@@ -48,7 +41,6 @@ from serena.payloads.method import (
     ChannelCloseOkPayload,
     ChannelClosePayload,
     ChannelOpenPayload,
-    ClassID,
     ConfirmSelectOkPayload,
     ConfirmSelectPayload,
     ConnectionCloseOkPayload,
@@ -760,10 +752,10 @@ def open_connection(
     Optional parameters:
 
     :param port: The port to connect to. Ignores for Unix sockets. Defaults to 5672.
-    :param username: The username to connect using.
-    :param password: The password to authenticate with.
-    :param virtual_host: The AMQP virtual host to connect to.
-    :param ssl_context: The SSL context to connect with.
+    :param username: The username to connect using. Defaults to ``guest``.
+    :param password: The password to authenticate with. Defaults to ``guest``.
+    :param virtual_host: The AMQP virtual host to connect to. Defaults to ``/``.
+    :param ssl_context: The SSL context to connect with. Defaults to None.
     """
 
     @asynccontextmanager

@@ -4,3 +4,5 @@ syntax: glob
 .venv/
 htmlcov/
 .coverage
+
+docs/_build

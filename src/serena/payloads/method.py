@@ -14,6 +14,56 @@ from serena.payloads.encoding import (
 )
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
 
+__all__ = (
+    # conn
+    "ConnectionStartPayload",
+    "ConnectionStartOkPayload",
+    "ConnectionSecurePayload",
+    "ConnectionSecureOkPayload",
+    "ConnectionTunePayload",
+    "ConnectionTuneOkPayload",
+    "ConnectionClosePayload",
+    "ConnectionCloseOkPayload",
+    "ConnectionOpenPayload",
+    "ConnectionOpenOkPayload",
+    # channel
+    "ChannelOpenPayload",
+    "ChannelOpenOkPayload",
+    "ChannelClosePayload",
+    "ChannelCloseOkPayload",
+    "ChannelFlowPayload",
+    "ChannelFlowOkPayload",
+    # exchange
+    "ExchangeDeclarePayload",
+    "ExchangeDeclareOkPayload",
+    "ExchangeDeletePayload",
+    "ExchangeDeleteOkPayload",
+    # queue
+    "QueueDeclarePayload",
+    "QueueDeclareOkPayload",
+    "QueueBindPayload",
+    "QueueBindOkPayload",
+    # basic
+    "BasicQOSPayload",
+    "BasicQOSOkPayload",
+    "BasicPublishPayload",
+    "BasicAckPayload",
+    "BasicNackPayload",
+    "BasicRejectPayload",
+    "BasicReturnPayload",
+    "BasicDeliverPayload",
+    "BasicConsumePayload",
+    "BasicConsumeOkPayload",
+    "BasicGetPayload",
+    "BasicGetOkPayload",
+    "BasicGetEmptyPayload",
+    "BasicCancelPayload",
+    "BasicCancelOkPayload",
+    # confirm
+    "ConfirmSelectPayload",
+    "ConfirmSelectOkPayload",
+)
+
 
 @attr.s(frozen=True, slots=True, init=True)
 class MethodPayload(abc.ABC):

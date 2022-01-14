@@ -6,6 +6,12 @@ except ImportError:
     from backports.strenum import StrEnum
 
 
+__all__ = (
+    "ReplyCode",
+    "ExchangeType",
+)
+
+
 class ClassID(IntEnum):
     """
     Enumeration of method class IDs.

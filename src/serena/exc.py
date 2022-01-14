@@ -10,6 +10,15 @@ from serena.payloads.method import (
     method_payload_name,
 )
 
+__all__ = (
+    "AMQPError",
+    "InvalidProtocolError",
+    "AMQPStateError",
+    "MessageReturnedError",
+    "InvalidPayloadTypeError",
+    "UnexpectedCloseError",
+)
+
 
 class AMQPError(Exception):
     """
@@ -41,9 +50,15 @@ class MessageReturnedError(AMQPError):
     """
 
     def __init__(self, reply_code: ReplyCode, reply_text: str, exchange: str, routing_key: str):
+        #: The server-provided error code.
         self.reply_code = reply_code
+        #: The server-provided error text.
         self.reply_text = reply_text
+
+        #: The exchange the message was returned from.
         self.exchange = exchange
+
+        #: The routing key the message was using.
         self.routing_key = routing_key
 
     def __str__(self):
@@ -101,9 +116,14 @@ class UnexpectedCloseError(AMQPError):
         class_id: int,
         method_id: int,
     ):
+        #: The server-provided error code.
         self.reply_code = reply_code
+        #: The server-provided error text.
         self.reply_message = reply_message
+
+        #: The class ID of the method that caused this error.
         self.class_id = class_id
+        #: The method ID of the method that caused this error.
         self.method_id = method_id
 
         message = f"{reply_code.name}: {reply_message}"
