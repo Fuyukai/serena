@@ -34,6 +34,9 @@ class ReplyCode(IntEnum):
     #: time. The client may retry at a later time.
     content_too_large = 311
 
+    #: Message cannot be delivered to any queue.
+    no_route = 312
+
     #: When the exchange cannot deliver to a consumer when the immediate flag is set. As a result
     #: of pending data on the queue or the absence of any consumers of the queue.
     no_consumers = 313

@@ -48,9 +48,11 @@ class MessageReturnedError(AMQPError):
 
     def __str__(self):
         msg = (
-            f"Message with routing key {self.routing_key} was returned from {self.exchange}: "
+            f"Message with routing key '{self.routing_key}' was returned from '{self.exchange}': "
             f"{self.reply_code.name}: {self.reply_text}"
         )
+
+        return msg
 
     __repr__ = __str__
 

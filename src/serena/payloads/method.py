@@ -383,6 +383,8 @@ class ExchangeDeletePayload(MethodPayload):
     method = 20
     is_client_side = False
 
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
     #: The name of the exchange to delete.
     name: str = attr.ib()
 
@@ -807,6 +809,8 @@ PAYLOAD_TYPES = {
     ClassID.EXCHANGE: {
         ExchangeDeclarePayload.method: ExchangeDeclarePayload,
         ExchangeDeclareOkPayload.method: ExchangeDeclareOkPayload,
+        ExchangeDeletePayload.method: ExchangeDeletePayload,
+        ExchangeDeleteOkPayload.method: ExchangeDeleteOkPayload,
     },
     ClassID.QUEUE: {
         QueueDeclarePayload.method: QueueDeclarePayload,
@@ -825,6 +829,7 @@ PAYLOAD_TYPES = {
         BasicGetPayload.method: BasicGetPayload,
         BasicGetOkPayload.method: BasicGetOkPayload,
         BasicGetEmptyPayload.method: BasicGetEmptyPayload,
+        BasicReturnPayload.method: BasicReturnPayload,
     },
     ClassID.CONFIRM: {
         ConfirmSelectPayload.method: ConfirmSelectPayload,
@@ -850,7 +855,7 @@ def deserialise_payload(body: bytes) -> MethodPayload:
     try:
         payload_klass = PAYLOAD_TYPES[klass][method]
     except KeyError:
-        raise KeyError(f"Unknown method: {klass}/{method}") from None
+        raise KeyError(f"Unknown method: {klass.name}/{method}") from None
 
     attr.resolve_types(payload_klass)
     fields = attr.fields(payload_klass)
