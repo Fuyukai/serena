@@ -88,3 +88,14 @@ class ReplyCode(enum.IntEnum):
     #: The server could not complete the method because of an internal error. The server may
     #: require intervention by an operator in order to resume normal operations.
     internal_error = 541
+
+
+class ExchangeType(enum.StrEnum):
+    """
+    Enumeration of possible exchange types.
+    """
+
+    DIRECT = "direct"
+    FANOUT = "fanout"
+    TOPIC = "topic"
+    HEADERS = "headers"

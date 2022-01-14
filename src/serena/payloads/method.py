@@ -320,6 +320,92 @@ class ChannelCloseOkPayload(MethodPayload):
     # empty body
 
 
+## EXCHANGE ##
+@attr.s(frozen=True, slots=True)
+class ExchangeDeclarePayload(MethodPayload):
+    """
+    Payload for the ``declare`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 10
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the exchange to be created.
+    name: str = attr.ib()
+
+    #: The type of the exchange to be created.
+    exchange_type: str = attr.ib()
+
+    #: If True, no Declare-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: If True, the exchange may not bee used ddirectly by publishers, but only when bound to other
+    #: exchanges.
+    internal: bool = attr.ib()
+
+    #: If True, the exchange will be deleted when all queues have finished using it.
+    auto_delete: bool = attr.ib()
+
+    #: If True, the the exchange will survive server restarts.
+    durable: bool = attr.ib()
+
+    #: If True, the server will return a DeclareOk if the exchange exists, and an error if it
+    #: doesn't.
+    passive: bool = attr.ib()
+
+    #: Implementation-specific arguments for the declaration.
+    arguments: Dict[str, Any] = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class ExchangeDeclareOkPayload(MethodPayload):
+    """
+    Payload for the ``declare-ok`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 11
+    is_client_side = True
+
+    # empty body
+
+
+@attr.s(frozen=True, slots=True)
+class ExchangeDeletePayload(MethodPayload):
+    """
+    Payload for the ``delete`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 20
+    is_client_side = False
+
+    #: The name of the exchange to delete.
+    name: str = attr.ib()
+
+    #: If True, no Declare-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: If True, the server will only delete the exchange if there are no queue bindings.
+    if_unused: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class ExchangeDeleteOkPayload(MethodPayload):
+    """
+    Payload for the ``delete-ok`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 21
+    is_client_side = True
+
+    # empty body
+
+
 ## QUEUE ##
 @attr.s(frozen=True, slots=True)
 class QueueDeclarePayload(MethodPayload):
@@ -717,6 +803,10 @@ PAYLOAD_TYPES = {
         FlowOkPayload.method: FlowOkPayload,
         ChannelClosePayload.method: ChannelClosePayload,
         ChannelCloseOkPayload.method: ChannelCloseOkPayload,
+    },
+    ClassID.EXCHANGE: {
+        ExchangeDeclarePayload.method: ExchangeDeclarePayload,
+        ExchangeDeclareOkPayload.method: ExchangeDeclareOkPayload,
     },
     ClassID.QUEUE: {
         QueueDeclarePayload.method: QueueDeclarePayload,
