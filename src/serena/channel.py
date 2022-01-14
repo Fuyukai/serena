@@ -10,6 +10,7 @@ from typing import (
     Optional,
     Type,
     TypeVar,
+    Union,
     cast,
 )
 
@@ -306,7 +307,7 @@ class Channel(object):
     async def exchange_declare(
         self,
         name: str,
-        type: ExchangeType,
+        type: Union[ExchangeType, str],
         *,
         passive: bool = False,
         durable: bool = False,
@@ -331,10 +332,13 @@ class Channel(object):
         :return: The name of the exchange, as it exists on the server.
         """
 
+        if isinstance(type, ExchangeType):
+            type = type.value
+
         payload = ExchangeDeclarePayload(
             reserved_1=0,
             name=name,
-            exchange_type=type.value,
+            exchange_type=type,
             passive=passive,
             durable=durable,
             auto_delete=auto_delete,
@@ -348,14 +352,14 @@ class Channel(object):
 
     async def exchange_delete(
         self,
-        exchange_name: str,
+        name: str,
         *,
         if_unused: bool = False,
     ):
         """
         Deletes an exchange.
 
-        :param exchange_name: The name of the exchange to delete.
+        :param name: The name of the exchange to delete.
         :param if_unused: If True, then the exchange will only be deleted if it has no queue
                           bindings.
         :return: Nothing.
@@ -363,7 +367,7 @@ class Channel(object):
 
         payload = ExchangeDeletePayload(
             reserved_1=0,
-            name=exchange_name,
+            name=name,
             if_unused=if_unused,
             no_wait=False,
         )

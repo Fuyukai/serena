@@ -16,7 +16,14 @@ from typing import AsyncContextManager, Dict, Optional, Union
 
 import anyio
 import attr
-from anyio import BrokenResourceError, CancelScope, ClosedResourceError, Lock, sleep
+from anyio import (
+    BrokenResourceError,
+    CancelScope,
+    ClosedResourceError,
+    EndOfStream,
+    Lock,
+    sleep,
+)
 from anyio.abc import ByteStream, TaskGroup
 from anyio.lowlevel import checkpoint
 
@@ -644,7 +651,7 @@ class AMQPConnection(object):
 
                         try:
                             reply = await self._read_single_frame()
-                        except (BrokenResourceError, ClosedResourceError):
+                        except EndOfStream:
                             raise AMQPStateError(
                                 f"Expected CloseOk, but connection failed to send it"
                             )
