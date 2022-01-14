@@ -463,6 +463,47 @@ class QueueDeclareOkPayload(MethodPayload):
     consumer_count: int = attr.ib(metadata=aq_type("long"))
 
 
+@attr.s(frozen=True, slots=True)
+class QueueBindPayload(MethodPayload):
+    """
+    Payload for the ``bind`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 20
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the queue to bind.
+    queue_name: str = attr.ib()
+
+    #: The name of the exchange to bind.
+    exchange_name: str = attr.ib()
+
+    #: The message routing key.
+    routing_key: str = attr.ib()
+
+    #: If True, no Bind-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: A set of implementation-specific (or exchange-specific) arguments.
+    arguments: Dict[str, Any] = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class QueueBindOkPayload(MethodPayload):
+    """
+    Payload for the ``bind-ok`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 21
+    is_client_side = True
+
+    # empty body
+
+
 ## BASIC ##
 @attr.s(frozen=True, slots=True)
 class BasicQOSPayload(MethodPayload):
@@ -815,6 +856,8 @@ PAYLOAD_TYPES = {
     ClassID.QUEUE: {
         QueueDeclarePayload.method: QueueDeclarePayload,
         QueueDeclareOkPayload.method: QueueDeclareOkPayload,
+        QueueBindPayload.method: QueueBindPayload,
+        QueueBindOkPayload.method: QueueBindOkPayload,
     },
     ClassID.BASIC: {
         BasicPublishPayload.method: BasicPublishPayload,

@@ -18,6 +18,7 @@ import anyio
 from anyio import CancelScope, ClosedResourceError, EndOfStream, Lock
 from anyio.lowlevel import checkpoint
 
+from serena.enums import ExchangeType
 from serena.exc import (
     AMQPStateError,
     InvalidPayloadTypeError,
@@ -42,8 +43,14 @@ from serena.payloads.method import (
     BasicReturnPayload,
     ChannelClosePayload,
     ChannelOpenOkPayload,
+    ExchangeDeclareOkPayload,
+    ExchangeDeclarePayload,
+    ExchangeDeleteOkPayload,
+    ExchangeDeletePayload,
     MethodFrame,
     MethodPayload,
+    QueueBindOkPayload,
+    QueueBindPayload,
     QueueDeclareOkPayload,
     QueueDeclarePayload,
     method_payload_name,
@@ -298,6 +305,73 @@ class Channel(object):
             return cast(MethodFrame[type], result)
 
     ## METHODS ##
+    async def exchange_declare(
+        self,
+        name: str,
+        type: ExchangeType,
+        *,
+        passive: bool = False,
+        durable: bool = False,
+        auto_delete: bool = False,
+        internal: bool = False,
+        arguments: Dict[str, Any] = None,
+    ) -> str:
+        """
+        Declares a new exchange.
+
+        :param name: The name of the exchange. Must not be empty.
+        :param type: The type of the exchange to create. See :ref:`amqp-concepts` for more
+                     information.
+        :param passive: If True, the server will return a DeclareOk if the exchange exists, and
+                        an error if it doesn't. This can be used to inspect server state without
+                        modification.
+        :param durable: If True, then the declared exchange will survive a server restart.
+        :param auto_delete: If True, then the declared exchange will be automatically deleted
+                            when all queues have finished using it.
+        :param internal: If True, then the exchange may not be used directly by publishers.
+        :param arguments: A dictionary of implementation-specific arguments.
+        :return: The name of the exchange, as it exists on the server.
+        """
+
+        payload = ExchangeDeclarePayload(
+            reserved_1=0,
+            name=name,
+            exchange_type=type.value,
+            passive=passive,
+            durable=durable,
+            auto_delete=auto_delete,
+            internal=internal,
+            no_wait=False,
+            arguments=arguments,
+        )
+
+        await self._send_and_receive_frame(payload, ExchangeDeclareOkPayload)
+        return payload.name
+
+    async def exchange_delete(
+        self,
+        exchange_name: str,
+        *,
+        if_unused: bool = False,
+    ):
+        """
+        Deletes an exchange.
+
+        :param exchange_name: The name of the exchange to delete.
+        :param if_unused: If True, then the exchange will only be deleted if it has no queue
+                          bindings.
+        :return: Nothing.
+        """
+
+        payload = ExchangeDeletePayload(
+            reserved_1=0,
+            name=exchange_name,
+            if_unused=if_unused,
+            no_wait=False,
+        )
+
+        await self._send_and_receive_frame(payload, ExchangeDeleteOkPayload)
+
     async def queue_declare(
         self,
         name: str = "",
@@ -342,6 +416,35 @@ class Channel(object):
 
         result = await self._send_and_receive_frame(payload, QueueDeclareOkPayload)
         return result.payload
+
+    async def queue_bind(
+        self,
+        queue_name: str,
+        exchange_name: str,
+        *,
+        routing_key: str = "",
+        arguments: Dict[str, Any] = None,
+    ):
+        """
+        Binds a queue to an exchange.
+
+        :param queue_name: The queue to bind.
+        :param exchange_name: The exchange to bind to.
+        :param routing_key: The routing key to use when binding.
+        :param arguments: Any server-specific or exchange-specific extra arguments.
+        :return: Nothing.
+        """
+
+        payload = QueueBindPayload(
+            reserved_1=0,
+            queue_name=queue_name,
+            exchange_name=exchange_name,
+            routing_key=routing_key,
+            no_wait=False,
+            arguments=arguments or {},
+        )
+
+        await self._send_and_receive_frame(payload, QueueBindOkPayload)
 
     def basic_consume(
         self,
