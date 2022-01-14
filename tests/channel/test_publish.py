@@ -2,7 +2,7 @@ import pytest
 
 from serena.connection import open_connection
 from serena.enums import ReplyCode
-from serena.exc import UnexpectedCloseError, MessageReturnedError
+from serena.exc import MessageReturnedError
 from serena.payloads.header import BasicHeader
 
 pytestmark = pytest.mark.anyio
@@ -110,4 +110,3 @@ async def test_return():
             assert channel.open
 
         assert e.value.reply_code == ReplyCode.no_route
-

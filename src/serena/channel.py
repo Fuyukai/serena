@@ -7,7 +7,6 @@ from typing import (
     Any,
     AsyncContextManager,
     AsyncIterable,
-    Dict,
     Optional,
     Type,
     TypeVar,
@@ -53,7 +52,6 @@ from serena.payloads.method import (
     QueueBindPayload,
     QueueDeclareOkPayload,
     QueueDeclarePayload,
-    method_payload_name,
 )
 
 if TYPE_CHECKING:
