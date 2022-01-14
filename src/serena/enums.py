@@ -1,7 +1,12 @@
-import enum
+from enum import IntEnum
+
+try:
+    from enum import StrEnum
+except ImportError:
+    from backports.strenum import StrEnum
 
 
-class ClassID(enum.IntEnum):
+class ClassID(IntEnum):
     """
     Enumeration of method class IDs.
     """
@@ -15,7 +20,7 @@ class ClassID(enum.IntEnum):
     TX = 90
 
 
-class ReplyCode(enum.IntEnum):
+class ReplyCode(IntEnum):
     """
     Enumeration of possible AMQP reply codes.
     """
@@ -90,7 +95,7 @@ class ReplyCode(enum.IntEnum):
     internal_error = 541
 
 
-class ExchangeType(enum.StrEnum):
+class ExchangeType(StrEnum):
     """
     Enumeration of possible exchange types.
     """
