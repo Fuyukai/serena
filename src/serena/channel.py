@@ -314,7 +314,7 @@ class Channel(object):
         durable: bool = False,
         auto_delete: bool = False,
         internal: bool = False,
-        arguments: Dict[str, Any] = None,
+        **arguments: Any,
     ) -> str:
         """
         Declares a new exchange.
@@ -380,7 +380,7 @@ class Channel(object):
         durable: bool = False,
         exclusive: bool = False,
         auto_delete: bool = False,
-        arguments: Dict[str, Any] = None,
+        **arguments: Any,
     ) -> QueueDeclareOkPayload:
         """
         Declares a queue.
@@ -397,7 +397,7 @@ class Channel(object):
         :param auto_delete: If True, this queue will be automatically deleted after all consumers
                             have finished. The queue will never be deleted before the first consumer
                             starts.
-        :param arguments: An optional dictionary of server implementation-specific arguments.
+        :param arguments: Optional server implementation-specific arguments.
         :return: The :class:`.QueueDeclareOkPayload` the server returned.
         """
 
@@ -423,7 +423,7 @@ class Channel(object):
         exchange_name: str,
         *,
         routing_key: str = "",
-        arguments: Dict[str, Any] = None,
+        **arguments: Any,
     ):
         """
         Binds a queue to an exchange.
@@ -441,7 +441,7 @@ class Channel(object):
             exchange_name=exchange_name,
             routing_key=routing_key,
             no_wait=False,
-            arguments=arguments or {},
+            arguments=arguments,
         )
 
         await self._send_and_receive_frame(payload, QueueBindOkPayload)
@@ -454,8 +454,8 @@ class Channel(object):
         no_local: bool = False,
         no_ack: bool = False,
         exclusive: bool = False,
-        arguments: Dict[str, Any] = None,
         auto_ack: bool = True,
+        **arguments: Any,
     ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
@@ -473,7 +473,8 @@ class Channel(object):
                           is another consumer already active.
         :param arguments: Implementation-specific arguments.
         :param auto_ack: If True, then messages will be automatically positively acknowledged
-                         in the generator loop. Has no effect if ``no_ack`` is True.
+                         in the generator loop. Has no effect if ``no_ack`` is True. This is a
+                         Serena-exclusive feature, not a protocol feature.
         """
 
         if self._is_consuming:
