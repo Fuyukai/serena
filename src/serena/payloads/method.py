@@ -49,7 +49,7 @@ class MethodFrame(Frame, Generic[_PAYLOAD_TYPE]):
 
 ## == CONNECTION == ##
 @attr.s(frozen=True, slots=True)
-class StartPayload(MethodPayload):
+class ConnectionStartPayload(MethodPayload):
     """
     Payload for the ``start`` method.
     """
@@ -75,7 +75,7 @@ class StartPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class StartOkPayload(MethodPayload):
+class ConnectionStartOkPayload(MethodPayload):
     """
     Payload for the ``start-ok`` method.
     """
@@ -98,7 +98,7 @@ class StartOkPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class SecurePayload(MethodPayload):
+class ConnectionSecurePayload(MethodPayload):
     """
     Payload for the ``secure`` method.
     """
@@ -112,7 +112,7 @@ class SecurePayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class SecureOkPayload(MethodPayload):
+class ConnectionSecureOkPayload(MethodPayload):
     """
     Payload for the ``secure-ok`` method.
     """
@@ -126,7 +126,7 @@ class SecureOkPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class TunePayload(MethodPayload):
+class ConnectionTunePayload(MethodPayload):
     """
     Payload for the ``tune`` method.
     """
@@ -146,7 +146,7 @@ class TunePayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class TuneOkPayload(MethodPayload):
+class ConnectionTuneOkPayload(MethodPayload):
     """
     Payload for the ``tune-ok`` method.
     """
@@ -196,7 +196,7 @@ class ConnectionOpenOkPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class ClosePayload(MethodPayload):
+class ConnectionClosePayload(MethodPayload):
     """
     Payload for the ``close`` method.
     """
@@ -219,7 +219,7 @@ class ClosePayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class CloseOkPayload(MethodPayload):
+class ConnectionCloseOkPayload(MethodPayload):
     """
     Payload (empty) for the ``close-ok`` method.
     """
@@ -257,7 +257,7 @@ class ChannelOpenOkPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class FlowPayload(MethodPayload):
+class ChannelFlowPayload(MethodPayload):
     """
     Payload for the ``flow`` method.
     """
@@ -271,7 +271,7 @@ class FlowPayload(MethodPayload):
 
 
 @attr.s(frozen=True, slots=True)
-class FlowOkPayload(MethodPayload):
+class ChannelFlowOkPayload(MethodPayload):
     """
     Payload for the ``flow-ok`` method.
     """
@@ -785,22 +785,22 @@ class ConfirmSelectOkPayload(MethodPayload):
 
 PAYLOAD_TYPES = {
     ClassID.CONNECTION: {
-        StartPayload.method: StartPayload,
-        StartOkPayload.method: StartOkPayload,
-        SecurePayload.method: SecurePayload,
-        SecureOkPayload.method: SecureOkPayload,
-        TunePayload.method: TunePayload,
-        TuneOkPayload.method: TuneOkPayload,
+        ConnectionStartPayload.method: ConnectionStartPayload,
+        ConnectionStartOkPayload.method: ConnectionStartOkPayload,
+        ConnectionSecurePayload.method: ConnectionSecurePayload,
+        ConnectionSecureOkPayload.method: ConnectionSecureOkPayload,
+        ConnectionTunePayload.method: ConnectionTunePayload,
+        ConnectionTuneOkPayload.method: ConnectionTuneOkPayload,
         ConnectionOpenPayload.method: ConnectionOpenPayload,
         ConnectionOpenOkPayload.method: ConnectionOpenOkPayload,
-        ClosePayload.method: ClosePayload,
-        CloseOkPayload.method: CloseOkPayload,
+        ConnectionClosePayload.method: ConnectionClosePayload,
+        ConnectionCloseOkPayload.method: ConnectionCloseOkPayload,
     },
     ClassID.CHANNEL: {
         ChannelOpenPayload.method: ChannelOpenPayload,
         ChannelOpenOkPayload.method: ChannelOpenOkPayload,
-        FlowPayload.method: FlowPayload,
-        FlowOkPayload.method: FlowOkPayload,
+        ChannelFlowPayload.method: ChannelFlowPayload,
+        ChannelFlowOkPayload.method: ChannelFlowOkPayload,
         ChannelClosePayload.method: ChannelClosePayload,
         ChannelCloseOkPayload.method: ChannelCloseOkPayload,
     },

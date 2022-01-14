@@ -5,7 +5,7 @@ from typing import Type, Union
 from serena.enums import ReplyCode
 from serena.payloads.method import (
     ChannelClosePayload,
-    ClosePayload,
+    ConnectionClosePayload,
     MethodPayload,
     method_payload_name,
 )
@@ -78,7 +78,9 @@ class UnexpectedCloseError(AMQPError):
     __slots__ = ("reply_code", "reply_message", "class_id", "method_id")
 
     @classmethod
-    def of(cls, payload: Union[ClosePayload, ChannelClosePayload]) -> UnexpectedCloseError:
+    def of(
+        cls, payload: Union[ConnectionClosePayload, ChannelClosePayload]
+    ) -> UnexpectedCloseError:
         """
         Creates a new :class:`.UnexpectedCloseError` from a close payload.
         """

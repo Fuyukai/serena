@@ -42,18 +42,18 @@ from serena.payloads.method import (
     ChannelClosePayload,
     ChannelOpenPayload,
     ClassID,
-    CloseOkPayload,
-    ClosePayload,
     ConfirmSelectOkPayload,
     ConfirmSelectPayload,
+    ConnectionCloseOkPayload,
+    ConnectionClosePayload,
     ConnectionOpenOkPayload,
     ConnectionOpenPayload,
+    ConnectionStartOkPayload,
+    ConnectionStartPayload,
+    ConnectionTuneOkPayload,
+    ConnectionTunePayload,
     MethodFrame,
     MethodPayload,
-    StartOkPayload,
-    StartPayload,
-    TuneOkPayload,
-    TunePayload,
 )
 from serena.utils.bitset import BitSet
 
@@ -145,7 +145,7 @@ class AMQPConnection(object):
 
         self._closed = False
         self._server_requested_close = False
-        self._close_info: Optional[ClosePayload] = None
+        self._close_info: Optional[ConnectionClosePayload] = None
 
         self._is_rabbitmq = False
 
@@ -295,8 +295,8 @@ class AMQPConnection(object):
             # this can *never* reasonably happen during the handshake
             assert isinstance(incoming_frame, MethodFrame), "incoming frame was not a method???"
 
-            if isinstance(incoming_frame.payload, ClosePayload):
-                close_ok = CloseOkPayload()
+            if isinstance(incoming_frame.payload, ConnectionClosePayload):
+                close_ok = ConnectionCloseOkPayload()
                 try:
                     await self._send_method_frame(0, close_ok)
                 finally:
@@ -305,9 +305,9 @@ class AMQPConnection(object):
             if state == AMQPState.INITIAL:
                 payload = incoming_frame.payload
 
-                if not isinstance(payload, StartPayload):  # pragma: no cover
+                if not isinstance(payload, ConnectionStartPayload):  # pragma: no cover
                     await self._close_ungracefully()
-                    raise InvalidPayloadTypeError(StartPayload, payload)
+                    raise InvalidPayloadTypeError(ConnectionStartPayload, payload)
 
                 version = (payload.version_major, payload.version_minor)
 
@@ -349,7 +349,7 @@ class AMQPConnection(object):
                     username.encode("utf-8"),
                     password.encode("utf-8"),
                 )
-                ok_frame = StartOkPayload(
+                ok_frame = ConnectionStartOkPayload(
                     properties=self.get_client_properties(),
                     mechanism="PLAIN",
                     response=sasl_response,
@@ -360,7 +360,7 @@ class AMQPConnection(object):
 
             elif state == AMQPState.RECEIVED_START:
                 payload = incoming_frame.payload
-                if isinstance(payload, TunePayload):
+                if isinstance(payload, ConnectionTunePayload):
                     wanted_channel_size = min(payload.max_channels, 65535)
                     logger.debug(
                         f"Server asks for {payload.max_channels} channels, "
@@ -384,7 +384,7 @@ class AMQPConnection(object):
                     )
                     self._actual_heartbeat_interval = hb_interval
 
-                    tune_ok = TuneOkPayload(
+                    tune_ok = ConnectionTuneOkPayload(
                         max_channels=wanted_channel_size,
                         max_frame_size=wanted_frame_size,
                         heartbeat_delay=hb_interval,
@@ -396,7 +396,7 @@ class AMQPConnection(object):
                     await self._send_method_frame(0, open)
                     state = AMQPState.RECEIVED_TUNE
                 else:  # pragma: no cover
-                    raise InvalidPayloadTypeError(TunePayload, payload)
+                    raise InvalidPayloadTypeError(ConnectionTunePayload, payload)
 
             elif state == AMQPState.RECEIVED_TUNE:
                 payload = incoming_frame.payload
@@ -465,7 +465,7 @@ class AMQPConnection(object):
 
         payload = frame.payload
 
-        if isinstance(payload, ClosePayload):
+        if isinstance(payload, ConnectionClosePayload):
             # server closing connection
             logger.info("Server requested close...")
             self._server_requested_close = True
@@ -620,7 +620,7 @@ class AMQPConnection(object):
             # send a CloseOk method if the server requested our closure
             if self._server_requested_close:
                 logger.debug("Acknowledging server close...")
-                payload = CloseOkPayload()
+                payload = ConnectionCloseOkPayload()
                 await self._send_method_frame(0, payload)
                 await self._close_ungracefully()
 
@@ -630,7 +630,7 @@ class AMQPConnection(object):
             else:
                 logger.debug("Sending close payload...")
 
-                payload = ClosePayload(
+                payload = ConnectionClosePayload(
                     reply_code=ReplyCode(reply_code), reply_text=reply_text, class_id=0, method_id=0
                 )
 
@@ -650,7 +650,7 @@ class AMQPConnection(object):
                             )
 
                         if isinstance(reply, MethodFrame) and isinstance(
-                            reply.payload, CloseOkPayload
+                            reply.payload, ConnectionCloseOkPayload
                         ):
                             logger.debug("Received CloseOk, closing connection")
                             return
