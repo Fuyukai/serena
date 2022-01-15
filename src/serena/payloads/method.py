@@ -47,6 +47,8 @@ __all__ = (
     "QueueDeleteOkPayload",
     "QueuePurgePayload",
     "QueuePurgeOkPayload",
+    "QueueUnbindPayload",
+    "QueueUnbindOkPayload",
     # basic
     "BasicQOSPayload",
     "BasicQOSOkPayload",
@@ -630,6 +632,48 @@ class QueueDeleteOkPayload(MethodPayload):
     message_count: int = attr.ib(metadata=aq_type("long"))
 
 
+@attr.s(frozen=True, slots=True)
+class QueueUnbindPayload(MethodPayload):
+    """
+    Payload for the ``unbind`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 50
+    is_client_side = False
+
+    # identical to QueueBind...
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the queue to bind.
+    queue_name: str = attr.ib()
+
+    #: The name of the exchange to bind.
+    exchange_name: str = attr.ib()
+
+    #: The message routing key.
+    routing_key: str = attr.ib()
+
+    #: If True, no Bind-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: A set of implementation-specific (or exchange-specific) arguments.
+    arguments: Dict[str, Any] = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class QueueUnbindOkPayload(MethodPayload):
+    """
+    Payload for the ``unbind-ok`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 51
+    is_client_side = True
+
+    # empty body
+
+
 ## BASIC ##
 @attr.s(frozen=True, slots=True)
 class BasicQOSPayload(MethodPayload):
@@ -988,6 +1032,8 @@ PAYLOAD_TYPES = {
         QueueDeleteOkPayload.method: QueueDeleteOkPayload.method,
         QueuePurgePayload.method: QueuePurgePayload,
         QueuePurgeOkPayload.method: QueuePurgeOkPayload,
+        QueueUnbindPayload.method: QueueUnbindPayload,
+        QueueUnbindOkPayload.method: QueueUnbindOkPayload,
     },
     ClassID.BASIC: {
         BasicPublishPayload.method: BasicPublishPayload,
