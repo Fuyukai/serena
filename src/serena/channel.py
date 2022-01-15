@@ -53,6 +53,12 @@ from serena.payloads.method import (
     QueueBindPayload,
     QueueDeclareOkPayload,
     QueueDeclarePayload,
+    QueueDeleteOkPayload,
+    QueueDeletePayload,
+    QueuePurgeOkPayload,
+    QueuePurgePayload,
+    QueueUnbindOkPayload,
+    QueueUnbindPayload,
 )
 
 if TYPE_CHECKING:
@@ -354,7 +360,7 @@ class Channel(object):
         name: str,
         *,
         if_unused: bool = False,
-    ):
+    ) -> None:
         """
         Deletes an exchange.
 
@@ -422,10 +428,9 @@ class Channel(object):
         self,
         queue_name: str,
         exchange_name: str,
-        *,
-        routing_key: str = "",
+        routing_key: str,
         **arguments: Any,
-    ):
+    ) -> None:
         """
         Binds a queue to an exchange.
 
@@ -446,6 +451,80 @@ class Channel(object):
         )
 
         await self._send_and_receive_frame(payload, QueueBindOkPayload)
+
+    async def queue_delete(
+        self,
+        queue_name: str,
+        *,
+        if_empty: bool = False,
+        if_unused: bool = False,
+    ) -> int:
+        """
+        Deletes a queue.
+
+        :param queue_name: The name of the queue to delete.
+        :param if_empty: If True, the queue will only be deleted if it is empty.
+        :param if_unused: If True, the queue will only be deleted if it is unused.
+        :return: The number of messages deleted.
+        """
+
+        payload = QueueDeletePayload(
+            reserved_1=0,
+            queue_name=queue_name,
+            if_empty=if_empty,
+            if_unused=if_unused,
+            no_wait=False,
+        )
+
+        result = await self._send_and_receive_frame(payload, QueueDeleteOkPayload)
+        return result.payload.message_count
+
+    async def queue_purge(
+        self,
+        queue_name: str,
+    ) -> int:
+        """
+        Purges all messages from a queue.
+
+        :param queue_name: The name of the queue to be purged.
+        :return: The number of messages deleted.
+        """
+
+        payload = QueuePurgePayload(
+            reserved_1=0,
+            name=queue_name,
+            no_wait=False,
+        )
+
+        result = await self._send_and_receive_frame(payload, QueuePurgeOkPayload)
+        return result.payload.message_count
+
+    async def queue_unbind(
+        self,
+        queue_name: str,
+        exchange_name: str,
+        routing_key: str,
+        **arguments: Any,
+    ) -> None:
+        """
+        Unbinds a queue from an exchange.
+
+        :param queue_name: The name of the queue to unbind.
+        :param exchange_name: The name of the exchange to unbind from.
+        :param routing_key: The routing key to unbind using.
+        :param arguments: Implementation-specific arguments to use.
+        """
+
+        payload = QueueUnbindPayload(
+            reserved_1=0,
+            queue_name=queue_name,
+            exchange_name=exchange_name,
+            routing_key=routing_key,
+            no_wait=False,
+            arguments=arguments,
+        )
+
+        await self._send_and_receive_frame(payload, QueueUnbindOkPayload)
 
     def basic_consume(
         self,
