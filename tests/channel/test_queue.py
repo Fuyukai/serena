@@ -5,7 +5,7 @@ import pytest
 from anyio.abc import TaskStatus
 
 from serena.connection import open_connection
-from serena.enums import ReplyCode
+from serena.enums import ReplyCode, ExchangeType
 from serena.exc import UnexpectedCloseError
 
 pytestmark = pytest.mark.anyio
@@ -113,3 +113,22 @@ async def test_queue_purge():
 
             await channel.basic_publish("", routing_key=queue.name, body=b"")
             assert (await channel.queue_purge(queue.name)) == 1
+
+
+async def test_queue_bind():
+    """
+    Tests binding a queue.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        async with conn.open_channel() as channel:
+            exchange_name = await channel.exchange_declare(
+                f"test-ex-{test_suffix}", ExchangeType.DIRECT, auto_delete=True
+            )
+            queue = await channel.queue_declare(name="", exclusive=True)
+            await channel.queue_bind(queue.name, exchange_name, routing_key="")
+
+            await channel.basic_publish(exchange_name, routing_key="", body=b"test")
+            message = await channel.basic_get(queue.name)
+            assert message.body == b"test"
+
