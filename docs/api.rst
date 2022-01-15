@@ -56,7 +56,7 @@ The resulting :class:`.AMQPConnection` can then be used to open a channel, like 
         async with conn.open_channel() as channel:
             ...
 
-It's recommended to look at :ref:`tutorials` for information on how to use this library
+It's recommended to look at the :ref:`tutorials` for information on how to use this library
 appropriately.
 
 Error Handling
@@ -94,6 +94,11 @@ Channel API
 
 .. autoclass:: serena.Channel
     :members:
+
+Message API
+-----------
+
+.. autoclass:: serena.AMQPMessage
 
 .. _AMQP Model: https://www.rabbitmq.com/tutorials/amqp-concepts.html
 .. _errata: https://www.rabbitmq.com/amqp-0-9-1-errata.html
