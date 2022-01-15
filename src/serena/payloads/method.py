@@ -43,6 +43,10 @@ __all__ = (
     "QueueDeclareOkPayload",
     "QueueBindPayload",
     "QueueBindOkPayload",
+    "QueueDeletePayload",
+    "QueueDeleteOkPayload",
+    "QueuePurgePayload",
+    "QueuePurgeOkPayload",
     # basic
     "BasicQOSPayload",
     "BasicQOSOkPayload",
@@ -554,6 +558,78 @@ class QueueBindOkPayload(MethodPayload):
     # empty body
 
 
+@attr.s(frozen=True, slots=True)
+class QueuePurgePayload(MethodPayload):
+    """
+    Payload for the ``purge`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 30
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the queue to purge.
+    name: str = attr.ib()
+
+    #: If True, no Purge-Ok method will be sent by the server.
+    purge_ok: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class QueuePurgeOkPayload(MethodPayload):
+    """
+    Payload for the ``purge-ok`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 31
+    is_client_side = True
+
+    #: The number of messages purged from the queue.
+    message_count: int = attr.ib(metadata=aq_type("long"))
+
+
+@attr.s(frozen=True, slots=True)
+class QueueDeletePayload(MethodPayload):
+    """
+    Payload for the ``delete`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 40
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the queue to delete.
+    queue_name: str = attr.ib()
+
+    #: If True, no Delete-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: If True, then the queue will be deleted only if it is empty.
+    if_empty: bool = attr.ib()
+
+    #: If True, then the queue will be deleted only if it is unused.
+    if_unused: bool = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class QueueDeleteOkPayload(MethodPayload):
+    """
+    Payload for the ``delete-ok`` method.
+    """
+
+    klass = ClassID.QUEUE
+    method = 41
+    is_client_side = True
+
+    #: The message count remaining for the queue.
+    message_count: int = attr.ib(metadata=aq_type("long"))
+
+
 ## BASIC ##
 @attr.s(frozen=True, slots=True)
 class BasicQOSPayload(MethodPayload):
@@ -908,6 +984,10 @@ PAYLOAD_TYPES = {
         QueueDeclareOkPayload.method: QueueDeclareOkPayload,
         QueueBindPayload.method: QueueBindPayload,
         QueueBindOkPayload.method: QueueBindOkPayload,
+        QueueDeletePayload.method: QueueDeletePayload,
+        QueueDeleteOkPayload.method: QueueDeleteOkPayload.method,
+        QueuePurgePayload.method: QueuePurgePayload,
+        QueuePurgeOkPayload.method: QueuePurgeOkPayload,
     },
     ClassID.BASIC: {
         BasicPublishPayload.method: BasicPublishPayload,
