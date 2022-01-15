@@ -1,6 +1,8 @@
 import uuid
 
+import anyio
 import pytest
+from anyio.abc import TaskStatus
 
 from serena.connection import open_connection
 from serena.enums import ReplyCode
@@ -39,3 +41,75 @@ async def test_queue_exclusive_declaration():
 
         assert conn.open
         assert e.value.reply_code == ReplyCode.not_found
+
+
+async def test_queue_delete():
+    """
+    Tests deleting queues.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        with pytest.raises(UnexpectedCloseError) as e:
+            async with conn.open_channel() as channel:
+                declared = await channel.queue_declare("", exclusive=True)
+                result = await channel.queue_delete(declared.name)
+                assert result == 0
+                await channel.queue_declare(declared.name, passive=True)
+
+        assert e.value.reply_code == ReplyCode.not_found
+
+        async with conn.open_channel() as channel:
+            declared = await channel.queue_declare("", exclusive=True)
+            await channel.basic_publish("", routing_key=declared.name, body=b"")
+            result = await channel.queue_delete(declared.name)
+            assert result == 1
+
+
+async def test_delete_not_empty():
+    """
+    Tests deleting a non-empty queue.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        with pytest.raises(UnexpectedCloseError) as e:
+            async with conn.open_channel() as channel:
+                declared = await channel.queue_declare("", exclusive=True)
+                await channel.basic_publish("", routing_key=declared.name, body=b"test")
+                await channel.queue_delete(declared.name, if_empty=True)
+
+        assert e.value.reply_code == ReplyCode.precondition_failed
+
+
+async def test_delete_in_use():
+    """
+    Tests deleting a queue in use.
+    """
+
+    async def consumer(channel, queue_name, *, task_status: TaskStatus):
+        async with channel.basic_consume(queue_name):
+            task_status.started()
+            await anyio.sleep_forever()
+
+    async with open_connection("127.0.0.1") as conn:
+
+        with pytest.raises(UnexpectedCloseError) as e:
+            async with conn.open_channel() as channel, anyio.create_task_group() as group:
+                queue = await channel.queue_declare(exclusive=True)
+                await group.start(consumer, channel, queue.name)
+                await channel.queue_delete(queue.name, if_unused=True)
+
+        assert e.value.reply_code == ReplyCode.precondition_failed
+
+
+async def test_queue_purge():
+    """
+    Tests purging a queue.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        async with conn.open_channel() as channel:
+            queue = await channel.queue_declare(exclusive=True)
+            assert (await channel.queue_purge(queue.name)) == 0
+
+            await channel.basic_publish("", routing_key=queue.name, body=b"")
+            assert (await channel.queue_purge(queue.name)) == 1

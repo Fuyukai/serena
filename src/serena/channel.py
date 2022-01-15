@@ -605,7 +605,9 @@ class Channel(object):
                 )
 
                 with CancelScope(shield=True):
-                    await self._send_and_receive_frame(cancel_payload)
+                    if not self._closed:
+                        await self._send_and_receive_frame(cancel_payload)
+
                     self._is_consuming = False
 
         return _do()
