@@ -577,7 +577,7 @@ class AMQPConnection(object):
                     # ack the close
                     # todo: should this be here?
                     if is_unclean:
-                        await self._send_method_frame(0, ChannelCloseOkPayload())
+                        await self._send_method_frame(channel, ChannelCloseOkPayload())
 
                     continue
 

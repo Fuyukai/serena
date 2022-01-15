@@ -1,3 +1,4 @@
+import anyio
 import pytest
 
 from serena.connection import open_connection
@@ -26,3 +27,18 @@ async def test_channel_server_side_close():
                 await channel.basic_get("non-existing-queue")
 
         assert e.value.reply_code == ReplyCode.not_found
+
+
+async def test_reusing_channel_id():
+    """
+    Tests reusing channel IDs.
+    """
+
+    async with open_connection("127.0.0.1") as conn:
+        async with conn.open_channel() as channel:
+            assert channel.id == 1
+
+        await channel.wait_until_closed()
+
+        async with conn.open_channel() as channel:
+            assert channel.id == 1

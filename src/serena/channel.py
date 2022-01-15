@@ -15,7 +15,7 @@ from typing import (
 )
 
 import anyio
-from anyio import CancelScope, ClosedResourceError, EndOfStream, Lock
+from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
 from anyio.lowlevel import checkpoint
 
 from serena.enums import ExchangeType
@@ -92,6 +92,7 @@ class Channel(object):
 
         self._open = False
         self._closed = False
+        self._close_event = Event()
 
         # no buffer as these are for events that should return immediately
         self._send, self._receive = anyio.create_memory_object_stream(0)
@@ -167,6 +168,9 @@ class Channel(object):
         await self._send.aclose()
         await self._delivery_send.aclose()
         self._closed = True
+
+        # noinspection PyAsyncCall
+        self._close_event.set()
 
         # aclose doesn't seem to checkpoint...
         await checkpoint()
@@ -308,6 +312,13 @@ class Channel(object):
                 raise InvalidPayloadTypeError(type, result.payload)
 
             return cast(MethodFrame[type], result)
+
+    async def wait_until_closed(self):
+        """
+        Waits until the channel is closed.
+        """
+
+        await self._close_event.wait()
 
     ## METHODS ##
     async def exchange_declare(
@@ -710,7 +721,13 @@ class Channel(object):
         payload = BasicRejectPayload(delivery_tag, requeue)
         await self._send_single_frame(payload)
 
-    async def basic_nack(self, delivery_tag: int, *, multiple: bool = False, requeue: bool = False):
+    async def basic_nack(
+        self,
+        delivery_tag: int,
+        *,
+        multiple: bool = False,
+        requeue: bool = False,
+    ):
         """
         Rejects an AMQP message. This is a RabbitMQ-specific extension.
 

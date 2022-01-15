@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import sys
 from typing import Any, ClassVar, Dict, Generic, TypeVar
 
 import attr
@@ -973,7 +974,7 @@ PAYLOAD_TYPES = {
         QueueBindPayload.method: QueueBindPayload,
         QueueBindOkPayload.method: QueueBindOkPayload,
         QueueDeletePayload.method: QueueDeletePayload,
-        QueueDeleteOkPayload.method: QueueDeleteOkPayload.method,
+        QueueDeleteOkPayload.method: QueueDeleteOkPayload,
         QueuePurgePayload.method: QueuePurgePayload,
         QueuePurgeOkPayload.method: QueuePurgeOkPayload,
         QueueUnbindPayload.method: QueueUnbindPayload,
