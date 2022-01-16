@@ -10,12 +10,10 @@ Serena is a structurally concurrent AMQP 0-9-1 client library, for usage with th
 
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 3
     :caption: Contents:
 
     api.rst
-
-    tutorials/index.rst
 
 
 Naming
