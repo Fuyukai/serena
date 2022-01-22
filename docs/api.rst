@@ -8,6 +8,9 @@ These are API docs for the public-facing parts of Serena.
 Connection API
 --------------
 
+.. autofunction:: serena.open_connection
+    :async-with:
+
 .. autoclass:: serena.AMQPConnection
     :members:
 
@@ -21,4 +24,5 @@ Message API
 -----------
 
 .. autoclass:: serena.AMQPMessage
+    :members:
 

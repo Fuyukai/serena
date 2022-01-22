@@ -124,7 +124,7 @@ class AMQPConnection(object):
         stream: ByteStream,
         *,
         heartbeat_interval: int = 60,
-        channel_buffer_size: int = 64,  # reasonable default
+        channel_buffer_size: int = 48,  # reasonable default
         desired_frame_size: int = 131072,
     ):
         """
@@ -754,6 +754,7 @@ async def _open_connection(
     return connection
 
 
+# noinspection PyIncorrectDocstring
 def open_connection(
     address: Union[str, PathLike],
     *,
@@ -778,6 +779,14 @@ def open_connection(
     :param password: The password to authenticate with. Defaults to ``guest``.
     :param virtual_host: The AMQP virtual host to connect to. Defaults to ``/``.
     :param ssl_context: The SSL context to connect with. Defaults to None.
+
+    In addition, some parameters are passed directly to the class, which allows customising
+    some protocol details.
+
+    :param heartbeat_interval: The heartbeat interval to negotiate with, in seconds. This may not
+                               be the actual heartbeat interval used.
+    :param channel_buffer_size: The buffer size for channel messages.
+    :param desired_frame_size: The maximum body message frame size desired.
     """
 
     @asynccontextmanager
