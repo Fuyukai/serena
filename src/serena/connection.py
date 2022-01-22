@@ -74,9 +74,6 @@ class AMQPState(enum.IntEnum):
     #: We have received the Tune payload, and we are waiting for the Open-Ok payload.
     RECEIVED_TUNE = 2
 
-    #: The default idle state.
-    READY = 10
-
 
 @attr.s(slots=True, frozen=False)
 class HeartbeatStatistics:
@@ -403,7 +400,6 @@ class AMQPConnection(object):
                 if isinstance(payload, ConnectionOpenOkPayload):
                     # we are open
                     logger.info("AMQP connection is ready to go")
-                    state = AMQPState.READY
                     break
                 else:  # pragma: no cover
                     raise InvalidPayloadTypeError(ConnectionOpenOkPayload, payload)
@@ -484,12 +480,14 @@ class AMQPConnection(object):
                 # noinspection PyAsyncCall
                 self._cancel_scope.cancel()
 
-    async def _remove_channel(self, channel_id: int):
+    async def _remove_channel(self, channel_id: int, payload: Optional[ChannelClosePayload]):
         """
         Removes a channel.
-        :param channel_id:
-        :return:
         """
+
+        self._channels[channel_id] = False
+        chan = self._channel_channels.pop(channel_id)
+        await chan._close(payload)
 
     async def _enqueue_frame(self, channel: Channel, frame: Frame):
         """
@@ -586,12 +584,13 @@ class AMQPConnection(object):
                     is_unclean = isinstance(frame.payload, ChannelClosePayload)
                     logger.debug(f"Channel close received, {is_unclean=}")
 
-                    await self._remove_channel(channel)
-
                     # ack the close
-                    # todo: should this be here?
-                    if is_unclean:
-                        await self._send_method_frame(channel, ChannelCloseOkPayload())
+                    # todo: should his be here?
+                    try:
+                        await self._remove_channel(channel, frame.payload)
+                    finally:
+                        if is_unclean:
+                            await self._send_method_frame(channel, ChannelCloseOkPayload())
 
                     continue
 
