@@ -5,7 +5,7 @@ import pytest
 from anyio.abc import TaskStatus
 
 from serena.connection import open_connection
-from serena.enums import ReplyCode, ExchangeType
+from serena.enums import ExchangeType, ReplyCode
 from serena.exc import UnexpectedCloseError
 
 pytestmark = pytest.mark.anyio
@@ -131,4 +131,3 @@ async def test_queue_bind():
             await channel.basic_publish(exchange_name, routing_key="", body=b"test")
             message = await channel.basic_get(queue.name)
             assert message.body == b"test"
-

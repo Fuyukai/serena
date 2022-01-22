@@ -407,7 +407,7 @@ class AMQPConnection(object):
                 else:  # pragma: no cover
                     raise InvalidPayloadTypeError(ConnectionOpenOkPayload, payload)
 
-    async def _open_channel(self):
+    async def _open_channel(self) -> Channel:
         """
         Opens a new channel.
         """

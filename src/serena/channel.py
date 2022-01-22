@@ -27,6 +27,7 @@ from serena.exc import (
 )
 from serena.frame import BodyFrame, Frame
 from serena.message import AMQPEnvelope, AMQPMessage
+from serena.mixin import ChannelLike
 from serena.payloads.header import BasicHeader, ContentHeaderFrame, ContentHeaderPayload
 from serena.payloads.method import (
     BasicAckPayload,
@@ -70,7 +71,7 @@ logger = logging.getLogger()
 
 
 # noinspection PyProtectedMember
-class Channel(object):
+class Channel(ChannelLike):
     """
     A wrapper around an AMQP channel.
     """
