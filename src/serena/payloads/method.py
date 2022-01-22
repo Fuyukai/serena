@@ -409,6 +409,88 @@ class ExchangeDeleteOkPayload(MethodPayload):
     # empty body
 
 
+@attr.s(frozen=True, slots=True)
+class ExchangeBindPayload(MethodPayload):
+    """
+    Payload for the ``bind`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 30
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the destination exchange to bind.
+    destination_name: str = attr.ib()
+
+    #: The name of the source exchange to bind.
+    source_name: str = attr.ib()
+
+    #: The routing key to bind using.
+    routing_key: str = attr.ib()
+
+    #: If True, no Bind-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: Implementation-specific arguments for the declaration.
+    arguments: Dict[str, Any] = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class ExchangeBindOkPayload(MethodPayload):
+    """
+    Payload for the ``bind-ok`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 31
+    is_client_side = True
+
+    # empty body
+
+
+@attr.s(frozen=True, slots=True)
+class ExchangeUnBindPayload(MethodPayload):
+    """
+    Payload for the ``unbind`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 40
+    is_client_side = False
+
+    reserved_1: int = attr.ib(metadata=aq_type("short"))
+
+    #: The name of the destination exchange to bind.
+    destination_name: str = attr.ib()
+
+    #: The name of the source exchange to bind.
+    source_name: str = attr.ib()
+
+    #: The routing key to bind using.
+    routing_key: str = attr.ib()
+
+    #: If True, no Bind-Ok method will be sent by the server.
+    no_wait: bool = attr.ib()
+
+    #: Implementation-specific arguments for the declaration.
+    arguments: Dict[str, Any] = attr.ib()
+
+
+@attr.s(frozen=True, slots=True)
+class ExchangeUnBindOkPayload(MethodPayload):
+    """
+    Payload for the ``bind-ok`` method.
+    """
+
+    klass = ClassID.EXCHANGE
+    method = 41
+    is_client_side = True
+
+    # empty body
+
+
 ## QUEUE ##
 @attr.s(frozen=True, slots=True)
 class QueueDeclarePayload(MethodPayload):
@@ -967,6 +1049,10 @@ PAYLOAD_TYPES = {
         ExchangeDeclareOkPayload.method: ExchangeDeclareOkPayload,
         ExchangeDeletePayload.method: ExchangeDeletePayload,
         ExchangeDeleteOkPayload.method: ExchangeDeleteOkPayload,
+        ExchangeBindPayload.method: ExchangeBindPayload,
+        ExchangeBindOkPayload.method: ExchangeBindOkPayload,
+        ExchangeUnBindPayload.method: ExchangeUnBindPayload,
+        ExchangeUnBindOkPayload.method: ExchangeUnBindPayload,
     },
     ClassID.QUEUE: {
         QueueDeclarePayload.method: QueueDeclarePayload,

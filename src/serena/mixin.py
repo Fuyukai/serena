@@ -57,6 +57,50 @@ class ChannelLike(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def exchange_bind(
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        **arguments: Any,
+    ) -> None:
+        """
+        Binds an exchange to another exchange. This is a
+        `RabbitMQ extension <https://www.rabbitmq.com/e2e.html>`__ and may not be supported in other
+        AMQP implementations.
+
+        :param destination: The name of the destination exchange to bind. A blank name means the
+                            default exchange.
+        :param source: The name of the source exchange to bind. A blank name means the default
+                       exchange.
+        :param routing_key: The routing key for the exchange binding.
+        :param arguments: A dictionary of implementation-specific arguments.
+        :return: Nothing.
+        """
+
+    @abc.abstractmethod
+    async def exchange_unbind(
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        **arguments: Any,
+    ) -> None:
+        """
+        Unbinds an exchange from another exchange. This is a
+        `RabbitMQ extension <https://www.rabbitmq.com/e2e.html>`__ and may not be supported in other
+        AMQP implementations.
+
+        :param destination: The name of the destination exchange to unbind. A blank name means the
+                            default exchange.
+        :param source: The name of the source exchange to unbind. A blank name means the default
+                       exchange.
+        :param routing_key: The routing key for the exchange binding that is being unbinded.
+        :param arguments: A dictionary of implementation-specific arguments.
+        :return: Nothing.
+        """
+
+    @abc.abstractmethod
     async def queue_declare(
         self,
         name: str = "",
@@ -190,6 +234,7 @@ class ChannelLike(abc.ABC):
         :param requeue: If True, then the rejected message will be requeued if possible.
         """
 
+    @abc.abstractmethod
     def basic_consume(
         self,
         queue_name: str,
@@ -221,6 +266,7 @@ class ChannelLike(abc.ABC):
                          Serena-exclusive feature, not a protocol feature.
         """
 
+    @abc.abstractmethod
     async def basic_publish(
         self,
         exchange_name: str,
@@ -252,6 +298,7 @@ class ChannelLike(abc.ABC):
             to close.
         """
 
+    @abc.abstractmethod
     async def basic_get(self, queue: str, *, no_ack: bool = False) -> Optional[AMQPMessage]:
         """
         Gets a single message from a queue.

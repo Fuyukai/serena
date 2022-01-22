@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from contextlib import aclosing, asynccontextmanager
 from typing import (
     TYPE_CHECKING,
@@ -45,10 +46,14 @@ from serena.payloads.method import (
     BasicReturnPayload,
     ChannelClosePayload,
     ChannelOpenOkPayload,
+    ExchangeBindOkPayload,
+    ExchangeBindPayload,
     ExchangeDeclareOkPayload,
     ExchangeDeclarePayload,
     ExchangeDeleteOkPayload,
     ExchangeDeletePayload,
+    ExchangeUnBindOkPayload,
+    ExchangeUnBindPayload,
     MethodFrame,
     MethodPayload,
     QueueBindOkPayload,
@@ -307,7 +312,7 @@ class Channel(ChannelLike):
         :return: A :class:`.kMethodFrame` that was returned as a result.
         """
 
-        returned_frame: MethodFrame[_PAYLOAD] = None
+        returned_frame: MethodFrame[_PAYLOAD] = None  # type: ignore
 
         async def _closure(task_status: TaskStatus):
             task_status.started()
@@ -401,6 +406,73 @@ class Channel(ChannelLike):
         )
 
         await self._send_and_receive_frame(payload, ExchangeDeleteOkPayload)
+
+    async def exchange_bind(
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        **arguments: Any,
+    ) -> None:
+        """
+        Binds an exchange to another exchange. This is a
+        `RabbitMQ extension <https://www.rabbitmq.com/e2e.html>`__ and may not be supported in other
+        AMQP implementations.
+
+        :param destination: The name of the destination exchange to bind. A blank name means the
+                            default exchange.
+        :param source: The name of the source exchange to bind. A blank name means the default
+                       exchange.
+        :param routing_key: The routing key for the exchange binding.
+        :param arguments: A dictionary of implementation-specific arguments.
+        :return: Nothing.
+        """
+
+        payload = ExchangeBindPayload(
+            reserved_1=0,
+            destination_name=destination,
+            source_name=source,
+            routing_key=routing_key,
+            no_wait=False,
+            arguments=arguments,
+        )
+
+        try:
+            await self._send_and_receive_frame(payload, ExchangeBindOkPayload)
+        except BaseException as e:
+            raise
+
+    async def exchange_unbind(
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        **arguments: Any,
+    ) -> None:
+        """
+        Unbinds an exchange from another exchange. This is a
+        `RabbitMQ extension <https://www.rabbitmq.com/e2e.html>`__ and may not be supported in other
+        AMQP implementations.
+
+        :param destination: The name of the destination exchange to unbind. A blank name means the
+                            default exchange.
+        :param source: The name of the source exchange to unbind. A blank name means the default
+                       exchange.
+        :param routing_key: The routing key for the exchange binding that is being unbinded.
+        :param arguments: A dictionary of implementation-specific arguments.
+        :return: Nothing.
+        """
+
+        payload = ExchangeUnBindPayload(
+            reserved_1=0,
+            destination_name=destination,
+            source_name=source,
+            routing_key=routing_key,
+            no_wait=False,
+            arguments=arguments,
+        )
+
+        await self._send_and_receive_frame(payload, ExchangeUnBindOkPayload)
 
     async def queue_declare(
         self,
