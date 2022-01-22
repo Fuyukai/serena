@@ -1,8 +1,9 @@
 import abc
 from typing import Any, AsyncContextManager, AsyncIterable, Optional, TypeVar, Union
 
-from serena import AMQPMessage, BasicHeader
 from serena.enums import ExchangeType
+from serena.message import AMQPMessage
+from serena.payloads.header import BasicHeader
 from serena.payloads.method import MethodPayload, QueueDeclareOkPayload
 
 
