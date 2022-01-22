@@ -1,4 +1,3 @@
-import anyio
 import pytest
 
 from serena.connection import open_connection

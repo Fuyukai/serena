@@ -1,10 +1,10 @@
 import abc
-from typing import Any, AsyncContextManager, AsyncIterable, Optional, TypeVar, Union
+from typing import Any, AsyncContextManager, AsyncIterable, Optional, Union
 
 from serena.enums import ExchangeType
 from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader
-from serena.payloads.method import MethodPayload, QueueDeclareOkPayload
+from serena.payloads.method import QueueDeclareOkPayload
 
 
 class ChannelLike(abc.ABC):

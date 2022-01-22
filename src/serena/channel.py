@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 from contextlib import aclosing, asynccontextmanager
 from typing import (
     TYPE_CHECKING,
@@ -16,7 +15,7 @@ from typing import (
 )
 
 import anyio
-from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock, WouldBlock
+from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
 from anyio.abc import TaskStatus
 from anyio.lowlevel import checkpoint
 

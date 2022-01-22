@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-import sys
 from typing import Any, ClassVar, Dict, Generic, TypeVar
 
 import attr
