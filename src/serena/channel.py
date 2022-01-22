@@ -15,7 +15,8 @@ from typing import (
 )
 
 import anyio
-from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
+from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock, WouldBlock
+from anyio.abc import TaskStatus
 from anyio.lowlevel import checkpoint
 
 from serena.enums import ExchangeType
@@ -133,7 +134,7 @@ class Channel(ChannelLike):
         Returns if this channel is open or not.
         """
 
-        return self._open and not self._closed
+        return not self._closed
 
     @property
     def max_buffer_size(self) -> int:
@@ -176,12 +177,12 @@ class Channel(ChannelLike):
         # aclose doesn't seem to checkpoint...
         await checkpoint()
 
-    async def _enqueue_regular(self, frame: MethodFrame):
+    def _enqueue_regular(self, frame: MethodFrame):
         """
         Enqueues a regular method frame.
         """
 
-        await self._send.send(frame)
+        self._send.send_nowait(frame)
 
     async def _enqueue_delivery(self, frame: Frame):
         """
@@ -306,13 +307,23 @@ class Channel(ChannelLike):
         :return: A :class:`.kMethodFrame` that was returned as a result.
         """
 
-        async with self._lock:
-            await self._connection._send_method_frame(self._channel_id, payload)
-            result = await self._receive_frame()
-            if type is not None and not isinstance(result.payload, type):
-                raise InvalidPayloadTypeError(type, result.payload)
+        returned_frame: MethodFrame[_PAYLOAD] = None
 
-            return cast(MethodFrame[type], result)
+        async def _closure(task_status: TaskStatus):
+            task_status.started()
+
+            nonlocal returned_frame
+            returned_frame = await self._receive_frame()
+
+        async with self._lock, anyio.create_task_group() as nursery:
+            await nursery.start(_closure)
+
+            await self._connection._send_method_frame(self._channel_id, payload)
+
+        if type is not None and not isinstance(returned_frame.payload, type):
+            raise InvalidPayloadTypeError(type, returned_frame.payload)
+
+        return cast(MethodFrame[type], returned_frame)
 
     async def wait_until_closed(self):
         """

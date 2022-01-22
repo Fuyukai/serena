@@ -16,7 +16,7 @@ from typing import AsyncContextManager, Dict, Optional, Union
 
 import anyio
 import attr
-from anyio import CancelScope, EndOfStream, Lock, sleep
+from anyio import CancelScope, EndOfStream, Lock, WouldBlock, sleep
 from anyio.abc import ByteStream, TaskGroup
 from anyio.lowlevel import checkpoint
 
@@ -53,6 +53,7 @@ from serena.payloads.method import (
     ConnectionTunePayload,
     MethodFrame,
     MethodPayload,
+    method_payload_name,
 )
 from serena.utils.bitset import BitSet
 
@@ -420,14 +421,22 @@ class AMQPConnection(object):
             # todo better error
             raise RuntimeError("All channel IDs have been used")
 
+        logger.debug(f"Opening new AMQP channel with {idx=}")
+
         channel_object = Channel(idx, self, self._channel_buffer_size)
         self._channel_channels[idx] = channel_object
 
-        open = ChannelOpenPayload()
+        try:
+            async with anyio.create_task_group() as tg:
+                open = ChannelOpenPayload()
 
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(partial(self._send_method_frame, idx, open))
-            await channel_object._wait_until_open()
+                tg.start_soon(partial(self._send_method_frame, idx, open))
+                await channel_object._wait_until_open()
+        except:
+            self._channel_channels.pop(idx)
+            raise
+
+        logger.debug(f"Enabling channel QOS with {self._channel_buffer_size // 3} max payloads.")
 
         # enable qos and select
         qos = BasicQOSPayload(
@@ -469,11 +478,18 @@ class AMQPConnection(object):
             logger.info("Server requested close...")
             self._server_requested_close = True
             self._close_info = payload
-            # cancel our worker tasks if needed
 
+            # cancel our worker tasks if needed
             if self._cancel_scope is not None:
                 # noinspection PyAsyncCall
                 self._cancel_scope.cancel()
+
+    async def _remove_channel(self, channel_id: int):
+        """
+        Removes a channel.
+        :param channel_id:
+        :return:
+        """
 
     async def _enqueue_frame(self, channel: Channel, frame: Frame):
         """
@@ -570,9 +586,7 @@ class AMQPConnection(object):
                     is_unclean = isinstance(frame.payload, ChannelClosePayload)
                     logger.debug(f"Channel close received, {is_unclean=}")
 
-                    self._channels[channel] = False
-                    self._channel_channels.pop(channel)
-                    await channel_object._close(frame.payload if is_unclean else None)
+                    await self._remove_channel(channel)
 
                     # ack the close
                     # todo: should this be here?
@@ -589,7 +603,13 @@ class AMQPConnection(object):
 
                 else:
                     # just delivery normally
-                    await channel_object._enqueue_regular(frame)
+                    try:
+                        channel_object._enqueue_regular(frame)
+                    except WouldBlock:
+                        logger.warning(
+                            f"Channel #{channel} was not listening for frame "
+                            f"{method_payload_name(frame.payload)}, dropping"
+                        )
 
             elif frame.type == FrameType.HEADER or frame.type == FrameType.BODY:
                 channel = frame.channel_id
@@ -673,9 +693,12 @@ class AMQPConnection(object):
                 yield channel
             finally:
                 # don't try and re-close the channel if the channel was closed server-side
+
                 if not channel._closed:
                     channel._closed = True
-                    await self._close_channel(channel.id)
+
+                    with anyio.CancelScope(shield=True):
+                        await self._close_channel(channel.id)
 
         return cm()
 
@@ -775,6 +798,9 @@ def open_connection(
                 conn._start_tasks(nursery)
                 try:
                     yield conn
+                except BaseException as e:
+                    logger.error(f"Caught error {type(e).__qualname__}, closing connection")
+                    raise
                 finally:
                     # noinspection PyAsyncCall
                     nursery.cancel_scope.cancel()
