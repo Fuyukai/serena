@@ -7,7 +7,9 @@ license = "LGPL-3.0-or-later"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Operating System :: OS Independent",
+    "Framework :: AnyIO",
 ]
+readme = "README.rst"
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
