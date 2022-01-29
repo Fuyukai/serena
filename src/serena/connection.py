@@ -55,6 +55,7 @@ from serena.payloads.method import (
     MethodPayload,
     method_payload_name,
 )
+from serena.pool import ChannelPool
 from serena.utils.bitset import BitSet
 
 logger = logging.getLogger(__name__)
@@ -429,6 +430,7 @@ class AMQPConnection(object):
                 tg.start_soon(partial(self._send_method_frame, idx, open))
                 await channel_object._wait_until_open()
         except:
+            self._channels[idx] = False
             self._channel_channels.pop(idx)
             raise
 
@@ -700,6 +702,33 @@ class AMQPConnection(object):
                         await self._close_channel(channel.id)
 
         return cm()
+
+    def open_channel_pool(self, initial_channels: int = 64) -> AsyncContextManager[ChannelPool]:
+        """
+        Opens a new channel pool.
+
+        :param initial_channels: The number of channels to use initially.
+        :return: An asynchronous context manager that will open a new channel pool.
+        """
+
+        @asynccontextmanager
+        async def _do():
+            pool = ChannelPool(self, initial_channels)
+
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(pool._open_channels)
+
+                try:
+                    await pool._open(initial_size=initial_channels)
+                    yield pool
+                finally:
+                    # noinspection PyAsyncCall
+                    tg.cancel_scope.cancel()
+
+                    with CancelScope(shield=True):
+                        await pool._close()
+
+        return _do()
 
     async def close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         """
