@@ -14,6 +14,7 @@ Serena is a structurally concurrent AMQP 0-9-1 client library, for usage with th
     :maxdepth: 3
 
     api.rst
+    history.rst
 
 Requirements
 ------------
@@ -125,6 +126,14 @@ To avoid this:
     Serena negotiates the frame size using the smallest size requested, either on the client or on
     the server side. You need to change it on both.
 
+
+Channel Pooling
+---------------
+
+.. versionadded:: 0.7.1
+
+Serena has a built-in channel pooling mechanism, which simplifies error handling (no need to wrap
+your entire ``async with`` in a try/except). See :meth:`.AMQPConnection.open_channel`.
 
 Naming
 ------

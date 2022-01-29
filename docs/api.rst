@@ -14,11 +14,18 @@ Connection API
 .. autoclass:: serena.AMQPConnection
     :members:
 
-Channel API
------------
+Channel-like API
+----------------
 
-.. autoclass:: serena.Channel
+This is shared between ``Channel`` and ``ChannelPool``.
+
+.. autoclass:: serena.mixin.ChannelLike
     :members:
+
+Specific APIs
+-------------
+
+.. automethod:: serena.Channel.wait_until_closed
 
 Message API
 -----------
