@@ -26,7 +26,7 @@ async def test_heartbeat_intervals():
     """
 
     async with open_connection("127.0.0.1", heartbeat_interval=2) as conn:
-        await sleep(6)
+        await sleep(4)
 
     assert conn.heartbeat_statistics().heartbeat_count > 2
 

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import logging
 from contextlib import aclosing, asynccontextmanager
+from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
     AsyncContextManager,
     AsyncIterable,
+    Awaitable,
+    Callable,
     Optional,
     Type,
     TypeVar,
@@ -72,7 +75,7 @@ if TYPE_CHECKING:
 
 _PAYLOAD = TypeVar("_PAYLOAD", bound=MethodPayload)
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 # noinspection PyProtectedMember
@@ -300,15 +303,15 @@ class Channel(ChannelLike):
         async with self._lock:
             await self._connection._send_method_frame(self._channel_id, payload)
 
-    async def _send_and_receive_frame(
-        self, payload: MethodPayload, type: Type[_PAYLOAD] = None
+    async def _send_and_receive(
+        self, callable: Callable[[], Awaitable[None]], type: Type[_PAYLOAD] = None
     ) -> MethodFrame[_PAYLOAD]:
         """
-        Sends and receives a method payload.
+        Sends and receives a payload.
 
-        :param payload: The :class:`.MethodPayload` to send.
+        :param callable: A callable to do the actual sending.
         :param type: The type of the expected payload to return.
-        :return: A :class:`.kMethodFrame` that was returned as a result.
+        :return: A :class:`.MethodFrame` that was returned as a result.
         """
 
         returned_frame: MethodFrame[_PAYLOAD] = None  # type: ignore
@@ -319,15 +322,30 @@ class Channel(ChannelLike):
             nonlocal returned_frame
             returned_frame = await self._receive_frame()
 
-        async with self._lock, anyio.create_task_group() as nursery:
+        async with anyio.create_task_group() as nursery:
             await nursery.start(_closure)
 
-            await self._connection._send_method_frame(self._channel_id, payload)
+            await callable()
 
         if type is not None and not isinstance(returned_frame.payload, type):
             raise InvalidPayloadTypeError(type, returned_frame.payload)
 
         return cast(MethodFrame[type], returned_frame)
+
+    async def _send_and_receive_frame(
+        self, payload: MethodPayload, type: Type[_PAYLOAD] = None
+    ) -> MethodFrame[_PAYLOAD]:
+        """
+        Sends and receives a method payload.
+
+        :param payload: The :class:`.MethodPayload` to send.
+        :param type: The type of the expected payload to return.
+        :return: A :class:`.MethodFrame` that was returned as a result.
+        """
+
+        async with self._lock:
+            fn = partial(self._connection._send_method_frame, self._channel_id, payload)
+            return await self._send_and_receive(fn, type=type)
 
     async def wait_until_closed(self):
         """
@@ -436,10 +454,7 @@ class Channel(ChannelLike):
             arguments=arguments,
         )
 
-        try:
-            await self._send_and_receive_frame(payload, ExchangeBindOkPayload)
-        except BaseException as e:
-            raise
+        await self._send_and_receive_frame(payload, ExchangeBindOkPayload)
 
     async def exchange_unbind(
         self,
@@ -741,21 +756,37 @@ class Channel(ChannelLike):
 
             # 1) method frame
             await self._connection._send_method_frame(self._channel_id, method_payload)
+
             # 2) header frame
             headers = header or BasicHeader()
-            await self._connection._send_header_frame(
-                self._channel_id,
-                method_klass=method_payload.klass,
-                body_length=len(body),
-                headers=headers,
-            )
+            if body:
+                # Body is not empty, we send_and_receive with the body and not the headers.
+                await self._connection._send_header_frame(
+                    self._channel_id,
+                    method_klass=method_payload.klass,
+                    body_length=len(body),
+                    headers=headers,
+                )
 
-            # 3) body
-            await self._connection._send_body_frames(self._channel_id, body)
+                # 3) Body
+                fn = partial(self._connection._send_body_frames, self._channel_id, body)
+                response = await self._send_and_receive(fn)
+
+            else:
+                # Body is empty, we send_and_receive with the headers.
+                fn = partial(
+                    self._connection._send_header_frame,
+                    self._channel_id,
+                    method_klass=method_payload.klass,
+                    body_length=len(body),
+                    headers=headers,
+                )
+
+                response = await self._send_and_receive(fn)
+
             self._message_counter += 1
 
-            # 4) wait for Ack or Return
-            response = await self._receive_frame()
+            # 4) check for Ack or Return
             payload = response.payload
 
             if isinstance(payload, BasicAckPayload):
