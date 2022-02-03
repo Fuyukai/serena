@@ -11,13 +11,7 @@ from typing import (
 )
 
 import anyio
-from anyio import (
-    BrokenResourceError,
-    CancelScope,
-    ClosedResourceError,
-    Event,
-    WouldBlock,
-)
+from anyio import Event, WouldBlock
 
 from serena.channel import Channel
 from serena.enums import ExchangeType
