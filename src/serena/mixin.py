@@ -308,3 +308,152 @@ class ChannelLike(abc.ABC):
                        consumption.
         :return: A :class:`.AMQPMessage` if one existed on the queue, otherwise None.
         """
+
+
+class ChannelDelegate(ChannelLike):  # pragma: no cover
+    """
+    Helper object that is a :class:`.ChannelLike` but is implemented via wrapping another channel.
+    This is useful for being inherited from and adding new methods for convenience shortcuts.
+    """
+
+    def __init__(self, channel: ChannelLike):
+        """
+        :param channel: The :class:`.ChannelLike` to delegate to.
+        """
+
+        self._delegate = channel
+
+    async def exchange_declare(
+        self,
+        name: str,
+        type: Union[ExchangeType, str],
+        *,
+        passive: bool = False,
+        durable: bool = False,
+        auto_delete: bool = False,
+        internal: bool = False,
+        **arguments: Any,
+    ) -> str:
+        return await self._delegate.exchange_declare(
+            name=name,
+            type=type,
+            passive=passive,
+            durable=durable,
+            auto_delete=auto_delete,
+            internal=internal,
+            **arguments,
+        )
+
+    async def exchange_delete(self, name: str, *, if_unused: bool = False) -> None:
+        return await self._delegate.exchange_delete(name, if_unused=if_unused)
+
+    async def exchange_bind(
+        self, destination: str, source: str, routing_key: str, **arguments: Any
+    ) -> None:
+        return await self._delegate.exchange_bind(
+            destination=destination, source=source, routing_key=routing_key, **arguments
+        )
+
+    async def exchange_unbind(
+        self, destination: str, source: str, routing_key: str, **arguments: Any
+    ) -> None:
+        return await self._delegate.exchange_unbind(
+            destination=destination, source=source, routing_key=routing_key, **arguments
+        )
+
+    async def queue_declare(
+        self,
+        name: str = "",
+        *,
+        passive: bool = False,
+        durable: bool = False,
+        exclusive: bool = False,
+        auto_delete: bool = False,
+        **arguments: Any,
+    ) -> QueueDeclareOkPayload:
+        return await self._delegate.queue_declare(
+            name=name,
+            passive=passive,
+            durable=durable,
+            exclusive=exclusive,
+            auto_delete=auto_delete,
+            **arguments,
+        )
+
+    async def queue_bind(
+        self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
+    ) -> None:
+        return await self._delegate.queue_bind(
+            queue_name=queue_name, exchange_name=exchange_name, routing_key=routing_key, **arguments
+        )
+
+    async def queue_delete(
+        self, queue_name: str, *, if_empty: bool = False, if_unused: bool = False
+    ) -> int:
+        return await self._delegate.queue_delete(
+            queue_name=queue_name, if_empty=if_empty, if_unused=if_unused
+        )
+
+    async def queue_purge(self, queue_name: str) -> int:
+        return await self._delegate.queue_purge(queue_name=queue_name)
+
+    async def queue_unbind(
+        self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
+    ) -> None:
+        return await self._delegate.queue_unbind(
+            queue_name=queue_name, exchange_name=exchange_name, routing_key=routing_key, **arguments
+        )
+
+    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
+        return await self._delegate.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
+
+    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
+        return await self._delegate.basic_reject(delivery_tag=delivery_tag, requeue=requeue)
+
+    async def basic_nack(self, delivery_tag: int, *, multiple: bool = False, requeue: bool = False):
+        return await self._delegate.basic_nack(
+            delivery_tag=delivery_tag, multiple=multiple, requeue=requeue
+        )
+
+    def basic_consume(
+        self,
+        queue_name: str,
+        consumer_tag: str = "",
+        *,
+        no_local: bool = False,
+        no_ack: bool = False,
+        exclusive: bool = False,
+        auto_ack: bool = True,
+        **arguments: Any,
+    ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
+        return self._delegate.basic_consume(
+            queue_name=queue_name,
+            consumer_tag=consumer_tag,
+            no_local=no_local,
+            no_ack=no_ack,
+            exclusive=exclusive,
+            auto_ack=auto_ack,
+            **arguments,
+        )
+
+    async def basic_publish(
+        self,
+        exchange_name: str,
+        routing_key: str,
+        body: bytes,
+        *,
+        header: BasicHeader = None,
+        mandatory: bool = True,
+        immediate: bool = False,
+    ):
+        return await self._delegate.basic_publish(
+            exchange_name=exchange_name,
+            routing_key=routing_key,
+            body=body,
+            header=header,
+            mandatory=mandatory,
+            immediate=immediate,
+        )
+
+    async def basic_get(self, queue: str, *, no_ack: bool = False) -> Optional[AMQPMessage]:
+        return await self._delegate.basic_get(queue=queue, no_ack=no_ack)

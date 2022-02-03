@@ -7,6 +7,7 @@ from serena.enums import *
 from serena.exc import *
 from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader
+from serena.mixin import ChannelLike, ChannelDelegate
 
 if not hasattr(logging.Logger, "trace"):
     # TRACE_LEVEL = 5
