@@ -103,7 +103,7 @@ class ChannelLike(abc.ABC):
     @abc.abstractmethod
     async def queue_declare(
         self,
-        name: str = "",
+        name: str,
         *,
         passive: bool = False,
         durable: bool = False,
@@ -192,46 +192,6 @@ class ChannelLike(abc.ABC):
         :param exchange_name: The name of the exchange to unbind from.
         :param routing_key: The routing key to unbind using.
         :param arguments: Implementation-specific arguments to use.
-        """
-
-    @abc.abstractmethod
-    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
-        """
-        Acknowledges AMQP messages.
-
-        :param delivery_tag: The delivery tag of the message to acknowledge.
-        :param multiple: If True, then all messages up to and including the message specified will
-                         be acknowledged, not just the message specified.
-        """
-
-    @abc.abstractmethod
-    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
-        """
-        Rejects an AMQP message.
-
-        .. note::
-
-            If you are using RabbitMQ, you might want to use :meth:`~.Channel.nack` instead.
-
-        :param delivery_tag: The delivery tag of the message to acknowledge.
-        :param requeue: If True, then the rejected message will be requeued if possible.
-        """
-
-    @abc.abstractmethod
-    async def basic_nack(
-        self,
-        delivery_tag: int,
-        *,
-        multiple: bool = False,
-        requeue: bool = False,
-    ):
-        """
-        Rejects an AMQP message. This is a RabbitMQ-specific extension.
-
-        :param delivery_tag: The delivery tag of the message to acknowledge.
-        :param multiple: If True, then all messages up to and including the message specified will
-                         be acknowledged, not just the message specified.
-        :param requeue: If True, then the rejected message will be requeued if possible.
         """
 
     @abc.abstractmethod
