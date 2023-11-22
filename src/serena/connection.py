@@ -824,6 +824,11 @@ async def open_connection(
                                be the actual heartbeat interval used.
     :param channel_buffer_size: The buffer size for channel messages.
     :param desired_frame_size: The maximum body message frame size desired.
+
+    .. warning::
+
+        This uses a :class:`~anyio.abc.TaskGroup` underneath; connection-wide closee errors will
+        be transformed into a :class:`.ExceptionGroup`.
     """
 
     conn = await _open_connection(
