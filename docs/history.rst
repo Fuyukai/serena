@@ -3,11 +3,17 @@
 Version History
 ===============
 
+0.8.0 (2023-11-22)
+------------------
+
+- Fully type and mark as ``py.typed``.
+- Update to AnyIO 4.0.0 properly. This includes making some methods no longer raise ExceptionGroups
+  due to hidden nurseries.
+
 0.7.3 (2022-04-21)
 ------------------
 
 - Remove ACK methods from :class:`.ChannelPool`. They don't really make sense.
-
 - Add manual ``checkout`` method on :class:`.ChannelPool`.
 
 0.7.2 (2022-02-03)
@@ -19,7 +25,6 @@ Version History
 ------------------
 
 - Add the ``ChannelPool`` API.
-
 - Fix a race condition with channel publishing.
 
 0.7.0
