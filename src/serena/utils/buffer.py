@@ -4,10 +4,10 @@ import struct
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO
-from typing import Any, ContextManager, Dict, List, overload
+from typing import Any, ContextManager, overload
 
 
-class DecodingBuffer(object):
+class DecodingBuffer:
     """
     A buffer that allows automatic decoding of AMQP wire protocol objects.
     """
@@ -174,7 +174,7 @@ class DecodingBuffer(object):
 
         return item
 
-    def read_array(self) -> List[Any]:
+    def read_array(self) -> list[Any]:
         """
         Reads an array of values.
         """
@@ -182,7 +182,7 @@ class DecodingBuffer(object):
         item_count = self.read_long()
         return [self.read_field_value() for _ in range(0, item_count)]
 
-    def read_table(self) -> Dict[str, Any]:
+    def read_table(self) -> dict[str, Any]:
         """
         Reads a table from the stream.
         """
@@ -217,7 +217,7 @@ class DecodingBuffer(object):
         return bit
 
 
-class EncodingBuffer(object):
+class EncodingBuffer:
     """
     A buffer that writes data in AMQP format.
     """
@@ -359,12 +359,10 @@ class EncodingBuffer(object):
         self._write(struct.pack(">q", value))
 
     @overload
-    def write_timestamp(self, value: datetime):
-        ...
+    def write_timestamp(self, value: datetime): ...
 
     @overload
-    def write_timestamp(self, value: int):
-        ...
+    def write_timestamp(self, value: int): ...
 
     def write_timestamp(self, value):
         """
@@ -445,7 +443,7 @@ class EncodingBuffer(object):
 
         return self._table_cm()
 
-    def write_table(self, table: Dict[str, Any]):
+    def write_table(self, table: dict[str, Any]):
         """
         Writes a complete table.
         """

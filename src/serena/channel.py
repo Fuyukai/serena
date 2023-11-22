@@ -1,26 +1,21 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
-    AsyncContextManager,
-    AsyncIterable,
-    Awaitable,
-    Callable,
-    Optional,
-    Type,
     TypeVar,
-    Union,
-    cast,
 )
 
 import anyio
+import outcome
 from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
 from anyio.abc import TaskStatus
 from anyio.lowlevel import checkpoint
+from outcome import Error, Value
 
 from serena.enums import ExchangeType
 from serena.exc import (
@@ -110,7 +105,7 @@ class Channel(ChannelLike):
             max_buffer_size=stream_buffer_size
         )
 
-        self._close_info: Optional[ChannelClosePayload] = None
+        self._close_info: ChannelClosePayload | None = None
         self._lock = Lock()
 
         self._is_consuming = False
@@ -174,11 +169,10 @@ class Channel(ChannelLike):
         """
 
         self._close_info = payload
-        await self._send.aclose()
-        await self._delivery_send.aclose()
+        self._send.close()
+        self._delivery_send.close()
         self._closed = True
 
-        # noinspection PyAsyncCall
         self._close_event.set()
 
         # aclose doesn't seem to checkpoint...
@@ -198,7 +192,7 @@ class Channel(ChannelLike):
 
         await self._delivery_send.send(frame)
 
-    async def _receive_delivery_message(self):
+    async def _receive_delivery_message(self) -> AMQPMessage | None:
         """
         Receives a single delivery message. This will reassemble a full message into its constituent
         frames.
@@ -211,6 +205,8 @@ class Channel(ChannelLike):
         while True:
             # check for successful reassembly first
             if headers is not None and len(body) >= headers.payload.full_size:
+                assert method is not None, "reached reassembly with invalid method"
+
                 await checkpoint()
                 # hehe payload.payload
                 return AMQPMessage(
@@ -224,7 +220,7 @@ class Channel(ChannelLike):
                 next_frame = await self._delivery_receive.receive()
             except EndOfStream:
                 if self._close_info is None:
-                    raise AMQPStateError("Channel was closed improperly")
+                    raise AMQPStateError("Channel was closed improperly") from None
 
                 raise UnexpectedCloseError.of(self._close_info) from None
 
@@ -232,7 +228,7 @@ class Channel(ChannelLike):
                 if not isinstance(next_frame, MethodFrame):
                     raise AMQPStateError(f"Expected a method frame, got {next_frame} instead")
 
-                if isinstance(next_frame.payload, (BasicGetOkPayload, BasicDeliverPayload)):
+                if isinstance(next_frame.payload, BasicGetOkPayload | BasicDeliverPayload):
                     method = next_frame
 
                 elif isinstance(next_frame.payload, BasicGetEmptyPayload):
@@ -273,7 +269,7 @@ class Channel(ChannelLike):
             frame = await self._receive.receive()
         except EndOfStream:
             if self._close_info is None:
-                raise AMQPStateError("Channel was closed improperly")
+                raise AMQPStateError("Channel was closed improperly") from None
 
             raise UnexpectedCloseError.of(self._close_info) from None
 
@@ -303,9 +299,9 @@ class Channel(ChannelLike):
         async with self._lock:
             await self._connection._send_method_frame(self._channel_id, payload)
 
-    async def _send_and_receive(
-        self, callable: Callable[[], Awaitable[None]], type: Type[_PAYLOAD] = None
-    ) -> MethodFrame[_PAYLOAD]:
+    async def _send_and_receive[Ret: MethodPayload](
+        self, callable: Callable[[], Awaitable[None]], expected: type[Ret] | None
+    ) -> MethodFrame[Ret]:
         """
         Sends and receives a payload.
 
@@ -314,27 +310,28 @@ class Channel(ChannelLike):
         :return: A :class:`.MethodFrame` that was returned as a result.
         """
 
-        returned_frame: MethodFrame[_PAYLOAD] = None  # type: ignore
+        returned_frame: Value[MethodFrame[Ret]] | Error = None  # type: ignore
 
         async def _closure(task_status: TaskStatus):
             task_status.started()
 
             nonlocal returned_frame
-            returned_frame = await self._receive_frame()
+            returned_frame = await outcome.acapture(self._receive_frame)
 
         async with anyio.create_task_group() as nursery:
             await nursery.start(_closure)
 
             await callable()
 
-        if type is not None and not isinstance(returned_frame.payload, type):
-            raise InvalidPayloadTypeError(type, returned_frame.payload)
+        returned = returned_frame.unwrap()
+        if expected is not None and not isinstance(returned.payload, expected):
+            raise InvalidPayloadTypeError(expected, returned.payload)
 
-        return cast(MethodFrame[type], returned_frame)
+        return returned
 
-    async def _send_and_receive_frame(
-        self, payload: MethodPayload, type: Type[_PAYLOAD] = None
-    ) -> MethodFrame[_PAYLOAD]:
+    async def _send_and_receive_frame[ReturnedPayload: MethodPayload](
+        self, payload: MethodPayload, expected_type: type[ReturnedPayload] | None
+    ) -> MethodFrame[ReturnedPayload]:
         """
         Sends and receives a method payload.
 
@@ -345,7 +342,7 @@ class Channel(ChannelLike):
 
         async with self._lock:
             fn = partial(self._connection._send_method_frame, self._channel_id, payload)
-            return await self._send_and_receive(fn, type=type)
+            return await self._send_and_receive(fn, expected_type)
 
     async def wait_until_closed(self):
         """
@@ -358,7 +355,7 @@ class Channel(ChannelLike):
     async def exchange_declare(
         self,
         name: str,
-        type: Union[ExchangeType, str],
+        type: ExchangeType | str,
         *,
         passive: bool = False,
         durable: bool = False,
@@ -635,7 +632,8 @@ class Channel(ChannelLike):
 
         await self._send_and_receive_frame(payload, QueueUnbindOkPayload)
 
-    def basic_consume(
+    @asynccontextmanager
+    async def basic_consume(
         self,
         queue_name: str,
         consumer_tag: str = "",
@@ -645,7 +643,7 @@ class Channel(ChannelLike):
         exclusive: bool = False,
         auto_ack: bool = True,
         **arguments: Any,
-    ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
+    ) -> AsyncGenerator[AsyncIterable[AMQPMessage | None], None]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
         iterator that yields incoming :class:`.AMQPMessage` instances.
@@ -674,41 +672,37 @@ class Channel(ChannelLike):
                 message = await self._receive_delivery_message()
                 yield message
 
-                if auto_ack:
+                if auto_ack and message:
                     await self.basic_ack(message.envelope.delivery_tag)
 
-        @asynccontextmanager
-        async def _do():
-            payload = BasicConsumePayload(
-                reserved_1=0,
-                queue_name=queue_name,
-                consumer_tag=consumer_tag,
-                no_local=no_local,
-                no_ack=no_ack,
-                exclusive=exclusive,
+        payload = BasicConsumePayload(
+            reserved_1=0,
+            queue_name=queue_name,
+            consumer_tag=consumer_tag,
+            no_local=no_local,
+            no_ack=no_ack,
+            exclusive=exclusive,
+            no_wait=False,
+            arguments=arguments or {},
+        )
+
+        response = await self._send_and_receive_frame(payload, BasicConsumeOkPayload)
+
+        try:
+            self._is_consuming = True
+            async with aclosing(_agen()) as agen:
+                yield agen
+        finally:
+            cancel_payload = BasicCancelPayload(
+                consumer_tag=response.payload.consumer_tag,
                 no_wait=False,
-                arguments=arguments or {},
             )
 
-            response = await self._send_and_receive_frame(payload, BasicConsumeOkPayload)
+            with CancelScope(shield=True):
+                if not self._closed:
+                    await self._send_and_receive_frame(cancel_payload, None)
 
-            try:
-                self._is_consuming = True
-                async with aclosing(_agen()) as agen:
-                    yield agen
-            finally:
-                cancel_payload = BasicCancelPayload(
-                    consumer_tag=response.payload.consumer_tag,
-                    no_wait=False,
-                )
-
-                with CancelScope(shield=True):
-                    if not self._closed:
-                        await self._send_and_receive_frame(cancel_payload)
-
-                    self._is_consuming = False
-
-        return _do()
+                self._is_consuming = False
 
     async def basic_publish(
         self,
@@ -716,7 +710,7 @@ class Channel(ChannelLike):
         routing_key: str,
         body: bytes,
         *,
-        header: BasicHeader = None,
+        header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
     ):
@@ -770,7 +764,7 @@ class Channel(ChannelLike):
 
                 # 3) Body
                 fn = partial(self._connection._send_body_frames, self._channel_id, body)
-                response = await self._send_and_receive(fn)
+                response = await self._send_and_receive(fn, None)
 
             else:
                 # Body is empty, we send_and_receive with the headers.
@@ -782,7 +776,7 @@ class Channel(ChannelLike):
                     headers=headers,
                 )
 
-                response = await self._send_and_receive(fn)
+                response = await self._send_and_receive(fn, None)
 
             self._message_counter += 1
 
@@ -795,9 +789,9 @@ class Channel(ChannelLike):
                         f"Expected Ack for delivery tag {self._message_counter}, "
                         f"but got Ack for delivery tag {payload.delivery_tag}"
                     )
-                logger.trace(f"C#{self.id}: Server ACKed published message")
-
-                return
+                logger.trace(  # type: ignore
+                    f"C#{self.id}: Server ACKed published message"
+                )
 
             elif isinstance(payload, BasicReturnPayload):
                 raise MessageReturnedError(
@@ -856,7 +850,7 @@ class Channel(ChannelLike):
         payload = BasicNackPayload(delivery_tag, multiple, requeue)
         await self._send_single_frame(payload)
 
-    async def basic_get(self, queue: str, *, no_ack: bool = False) -> Optional[AMQPMessage]:
+    async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         """
         Gets a single message from a queue.
 

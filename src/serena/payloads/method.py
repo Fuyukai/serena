@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, ClassVar, Dict, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 import attr
 
@@ -65,7 +65,7 @@ class ConnectionStartPayload(MethodPayload):
     version_minor: int = attr.ib(metadata=aq_type("octet"))
 
     #: The server properties.
-    properties: Dict[str, Any] = attr.ib()
+    properties: dict[str, Any] = attr.ib()
 
     #: The available security mechanisms.
     mechanisms: bytes = attr.ib()
@@ -85,7 +85,7 @@ class ConnectionStartOkPayload(MethodPayload):
     is_client_side = True
 
     #: The client properties.
-    properties: Dict[str, Any] = attr.ib()
+    properties: dict[str, Any] = attr.ib()
 
     #: The selected security mechanism.
     mechanism: str = attr.ib()
@@ -357,7 +357,7 @@ class ExchangeDeclarePayload(MethodPayload):
     passive: bool = attr.ib()
 
     #: Implementation-specific arguments for the declaration.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
@@ -433,7 +433,7 @@ class ExchangeBindPayload(MethodPayload):
     no_wait: bool = attr.ib()
 
     #: Implementation-specific arguments for the declaration.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
@@ -474,7 +474,7 @@ class ExchangeUnBindPayload(MethodPayload):
     no_wait: bool = attr.ib()
 
     #: Implementation-specific arguments for the declaration.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
@@ -522,7 +522,7 @@ class QueueDeclarePayload(MethodPayload):
     passive: bool = attr.ib()
 
     #: Implementation-specific arguments for the declaration.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
@@ -570,7 +570,7 @@ class QueueBindPayload(MethodPayload):
     no_wait: bool = attr.ib()
 
     #: A set of implementation-specific (or exchange-specific) arguments.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
@@ -684,7 +684,7 @@ class QueueUnbindPayload(MethodPayload):
     no_wait: bool = attr.ib()
 
     #: A set of implementation-specific (or exchange-specific) arguments.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)
@@ -759,7 +759,7 @@ class BasicConsumePayload(MethodPayload):
     no_local: bool = attr.ib()
 
     #: Extra, implementation specific arguments.
-    arguments: Dict[str, Any] = attr.ib()
+    arguments: dict[str, Any] = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)

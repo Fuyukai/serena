@@ -1,6 +1,5 @@
 import pytest
 from anyio import sleep
-
 from serena.connection import open_connection
 from serena.enums import ReplyCode
 from serena.exc import UnexpectedCloseError

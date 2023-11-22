@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import attr
 
@@ -23,7 +23,7 @@ class AMQPEnvelope:
     """
 
     #: The identifier for the consumer. May be None if this message was gotten synchronously.
-    consumer_tag: Optional[str] = attr.ib()
+    consumer_tag: str | None = attr.ib()
 
     #: The server-assigned delivery tag.
     delivery_tag: int = attr.ib()
@@ -38,7 +38,7 @@ class AMQPEnvelope:
     routing_key: str = attr.ib()
 
     #: The messages remaining in the queue. May be None if this message was consumed asynchronously.
-    message_count: Optional[int] = attr.ib()
+    message_count: int | None = attr.ib()
 
     @classmethod
     def from_deliver(cls, payload: BasicDeliverPayload) -> AMQPEnvelope:
@@ -94,7 +94,7 @@ class AMQPMessage:
     The wrapper around a single, delivered AMQP message.
     """
 
-    _channel: Channel = attr.ib()
+    _channel: Channel = attr.ib(alias="channel")  # explicit alias makes mypy/pyright/etc happy
 
     #: The "envelope" for the message. Wraps data about the delivery of the message.
     envelope: AMQPEnvelope = attr.ib()

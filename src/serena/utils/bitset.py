@@ -1,7 +1,7 @@
 from math import ceil
 
 
-class BitSet(object):
+class BitSet:
     """
     An indexable, compact array of booleans that is stored using integers.
     """

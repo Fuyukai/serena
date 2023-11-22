@@ -1,5 +1,4 @@
 import pytest
-
 from serena.connection import open_connection
 from serena.enums import ReplyCode
 from serena.exc import UnexpectedCloseError

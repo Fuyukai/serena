@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import struct
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import attr
 
@@ -53,45 +53,45 @@ class BasicHeader:
     """
 
     #: The MIME content-type of this message.
-    content_type: Optional[str] = attr.ib(default=None, kw_only=True)
+    content_type: str | None = attr.ib(default=None, kw_only=True)
 
     #: The MIME content-encoding of this message.
-    content_encoding: Optional[str] = attr.ib(default=None, kw_only=True)
+    content_encoding: str | None = attr.ib(default=None, kw_only=True)
 
     #: The custom user headers for this message.
-    headers: Dict[str, Any] = attr.ib(factory=dict, kw_only=True)
+    headers: dict[str, Any] = attr.ib(factory=dict, kw_only=True)
 
     #: The delivery mode for this message.
-    delivery_mode: Optional[int] = attr.ib(default=None, kw_only=True, metadata=aq_type("octet"))
+    delivery_mode: int | None = attr.ib(default=None, kw_only=True, metadata=aq_type("octet"))
 
     #: The message priority, 0 through 9.
-    priority: Optional[int] = attr.ib(default=None, kw_only=True, metadata=aq_type("octet"))
+    priority: int | None = attr.ib(default=None, kw_only=True, metadata=aq_type("octet"))
 
     #: The application correlation ID.
-    correlation_id: Optional[str] = attr.ib(default=None, kw_only=True)
+    correlation_id: str | None = attr.ib(default=None, kw_only=True)
 
     #: The reply-to field.
-    reply_to: Optional[str] = attr.ib(default=None, kw_only=True)
+    reply_to: str | None = attr.ib(default=None, kw_only=True)
 
     #: The expiration of this message.
-    expiration: Optional[str] = attr.ib(default=None, kw_only=True)
+    expiration: str | None = attr.ib(default=None, kw_only=True)
 
     #: The application-specific message ID of this message.
-    message_id: Optional[str] = attr.ib(default=None, kw_only=True)
+    message_id: str | None = attr.ib(default=None, kw_only=True)
 
     #: The message timestamp.
-    timestamp: Optional[int] = attr.ib(default=None, kw_only=True, metadata=aq_type("longlong"))
+    timestamp: int | None = attr.ib(default=None, kw_only=True, metadata=aq_type("longlong"))
 
     #: The message type name.
-    type_name: Optional[str] = attr.ib(default=None, kw_only=True)
+    type_name: str | None = attr.ib(default=None, kw_only=True)
 
     #: The creating user ID.
-    user_id: Optional[str] = attr.ib(default=None, kw_only=True)
+    user_id: str | None = attr.ib(default=None, kw_only=True)
 
     #: The application ID.
-    application_id: Optional[str] = attr.ib(default=None, kw_only=True)
+    application_id: str | None = attr.ib(default=None, kw_only=True)
 
-    reserved_1: Optional[str] = attr.ib(default=None, kw_only=True)
+    reserved_1: str | None = attr.ib(default=None, kw_only=True)
 
 
 def deserialise_basic_header(payload: bytes) -> ContentHeaderPayload:
@@ -107,7 +107,7 @@ def deserialise_basic_header(payload: bytes) -> ContentHeaderPayload:
     )
 
     attr.resolve_types(BasicHeader)
-    fields: Tuple[attr.Attribute] = attr.fields(BasicHeader)
+    fields: tuple[attr.Attribute] = attr.fields(BasicHeader)
     buffer = DecodingBuffer(rest)
 
     params = {}
@@ -133,7 +133,7 @@ def serialise_basic_header(klass_id: ClassID, body_size: int, body: BasicHeader)
     """
 
     attr.resolve_types(BasicHeader)
-    fields: Tuple[attr.Attribute] = attr.fields(BasicHeader)
+    fields: tuple[attr.Attribute] = attr.fields(BasicHeader)
     buffer = EncodingBuffer()
 
     flags = 0

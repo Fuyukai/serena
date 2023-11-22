@@ -1,13 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator, AsyncIterable
 from contextlib import asynccontextmanager
 from typing import (
     TYPE_CHECKING,
     Any,
     AsyncContextManager,
-    AsyncIterable,
-    Optional,
-    Union,
 )
 
 import anyio
@@ -37,8 +35,8 @@ class ChannelPool(ChannelLike):
         """
 
         self._conn = connection
-        self._qwrite, self._qread = anyio.create_memory_object_stream(
-            max_buffer_size=initial_size, item_type=Channel
+        self._qwrite, self._qread = anyio.create_memory_object_stream[Channel](
+            max_buffer_size=initial_size
         )
 
         self._needs_new_connection = Event()
@@ -126,7 +124,8 @@ class ChannelPool(ChannelLike):
         else:
             self._return_channel(channel)
 
-    def basic_consume(
+    @asynccontextmanager
+    async def basic_consume(
         self,
         queue_name: str,
         consumer_tag: str = "",
@@ -135,8 +134,8 @@ class ChannelPool(ChannelLike):
         no_ack: bool = False,
         exclusive: bool = False,
         auto_ack: bool = True,
-        **arguments: Any
-    ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
+        **arguments: Any,
+    ) -> AsyncGenerator[AsyncIterable[AMQPMessage | None], None]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
         iterator that yields incoming :class:`.AMQPMessage` instances.
@@ -156,23 +155,18 @@ class ChannelPool(ChannelLike):
                          Serena-exclusive feature, not a protocol feature.
         """
 
-        @asynccontextmanager
-        async def _do():
-            async with self._checkout() as channel:
-                async with channel.basic_consume(
-                    queue_name=queue_name,
-                    consumer_tag=consumer_tag,
-                    no_local=no_local,
-                    no_ack=no_ack,
-                    exclusive=exclusive,
-                    auto_ack=auto_ack,
-                    **arguments,
-                ) as it:
-                    yield it
+        async with self._checkout() as channel, channel.basic_consume(
+            queue_name=queue_name,
+            consumer_tag=consumer_tag,
+            no_local=no_local,
+            no_ack=no_ack,
+            exclusive=exclusive,
+            auto_ack=auto_ack,
+            **arguments,
+        ) as it:
+            yield it
 
-        return _do()
-
-    async def basic_get(self, queue: str, *, no_ack: bool = False) -> Optional[AMQPMessage]:
+    async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         """
         Gets a single message from a queue.
 
@@ -194,9 +188,9 @@ class ChannelPool(ChannelLike):
         routing_key: str,
         body: bytes,
         *,
-        header: BasicHeader = None,
+        header: BasicHeader | None = None,
         mandatory: bool = True,
-        immediate: bool = False
+        immediate: bool = False,
     ):
         """
         Publishes a message to a specific exchange.
@@ -256,13 +250,13 @@ class ChannelPool(ChannelLike):
     async def exchange_declare(
         self,
         name: str,
-        type: Union[ExchangeType, str],
+        type: ExchangeType | str,
         *,
         passive: bool = False,
         durable: bool = False,
         auto_delete: bool = False,
         internal: bool = False,
-        **arguments: Any
+        **arguments: Any,
     ) -> str:
         """
         Declares a new exchange.
@@ -361,7 +355,7 @@ class ChannelPool(ChannelLike):
         durable: bool = False,
         exclusive: bool = False,
         auto_delete: bool = False,
-        **arguments: Any
+        **arguments: Any,
     ) -> QueueDeclareOkPayload:
         """
         Declares a queue.

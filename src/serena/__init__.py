@@ -3,8 +3,15 @@ import logging
 # our public exports, relatively minimal
 from serena.channel import Channel
 from serena.connection import AMQPConnection, open_connection
-from serena.enums import *
-from serena.exc import *
+from serena.enums import ClassID, ExchangeType, ReplyCode
+from serena.exc import (
+    AMQPError,
+    AMQPStateError,
+    InvalidPayloadTypeError,
+    InvalidProtocolError,
+    MessageReturnedError,
+    UnexpectedCloseError,
+)
 from serena.message import AMQPMessage
 from serena.mixin import ChannelDelegate, ChannelLike
 from serena.payloads.header import BasicHeader
@@ -17,7 +24,7 @@ if not hasattr(logging.Logger, "trace"):
         if self.isEnabledFor(5):
             self._log(5, message, args, **kws)
 
-    logging.Logger.trace = trace
+    logging.Logger.trace = trace  # type: ignore
     del trace
 
 del logging

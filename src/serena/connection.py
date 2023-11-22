@@ -8,11 +8,11 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from os import PathLike
 from ssl import SSLContext
-from typing import AsyncContextManager, Dict, Optional, Union
+from typing import AsyncContextManager
 
 import anyio
 import attr
@@ -94,7 +94,7 @@ class HeartbeatStatistics:
     cur_heartbeat_time: datetime = attr.ib(default=None)
 
     @property
-    def interval(self) -> Optional[int]:
+    def interval(self) -> int | None:
         """
         Returns the interval between two heartbeats in nanoseconds.
         """
@@ -111,11 +111,11 @@ class HeartbeatStatistics:
         self.prev_heartbeat_time = self.cur_heartbeat_time
 
         self.cur_heartbeat_mn = time.monotonic_ns()
-        self.cur_heartbeat_time = datetime.now(timezone.utc).astimezone()
+        self.cur_heartbeat_time = datetime.now(UTC).astimezone()
 
 
 # noinspection PyProtectedMember
-class AMQPConnection(object):
+class AMQPConnection:
     """
     A single AMQP connection.
     """
@@ -143,7 +143,7 @@ class AMQPConnection(object):
 
         self._closed = False
         self._server_requested_close = False
-        self._close_info: Optional[ConnectionClosePayload] = None
+        self._close_info: ConnectionClosePayload | None = None
 
         self._is_rabbitmq = False
 
@@ -157,7 +157,7 @@ class AMQPConnection(object):
         self._channels: BitSet = BitSet(0)
 
         # mapping of channel id -> Channel
-        self._channel_channels: Dict[int, Channel] = {}
+        self._channel_channels: dict[int, Channel] = {}
 
         self._write_lock = Lock()
 
@@ -169,8 +169,8 @@ class AMQPConnection(object):
         version = importlib.metadata.version("serena")
 
         return {
-            "product": "Serena AMQP client".encode("utf-8"),
-            "platform": f"Python {sys.version}".encode("utf-8"),
+            "product": b"Serena AMQP client",
+            "platform": f"Python {sys.version}".encode(),
             "version": version.encode("utf-8"),
             "capabilities": {
                 "publisher_confirms": True,
@@ -314,7 +314,7 @@ class AMQPConnection(object):
                     raise InvalidProtocolError(f"Expected AMQP 0-9-1, but server speaks {version}")
 
                 mechanisms = set(payload.mechanisms.decode(encoding="utf-8").split(" "))
-                locales = set(payload.mechanisms.decode(encoding="utf-8").split(" "))
+                set(payload.mechanisms.decode(encoding="utf-8").split(" "))
 
                 platform = payload.properties["platform"].decode(encoding="utf-8")
                 product = payload.properties["product"].decode(encoding="utf-8")
@@ -325,7 +325,7 @@ class AMQPConnection(object):
                 version = payload.properties["version"].decode(encoding="utf-8")
                 logger.debug(f"Connected to {product} v{version} ({platform})")
 
-                caps: Dict[str, bool] = payload.properties["capabilities"]
+                caps: dict[str, bool] = payload.properties["capabilities"]
 
                 # this is the only capability we require
                 if not caps.get("publisher_confirms", False):  # pragma: no cover
@@ -482,7 +482,7 @@ class AMQPConnection(object):
                 # noinspection PyAsyncCall
                 self._cancel_scope.cancel()
 
-    async def _remove_channel(self, channel_id: int, payload: Optional[ChannelClosePayload]):
+    async def _remove_channel(self, channel_id: int, payload: ChannelClosePayload | None):
         """
         Removes a channel.
         """
@@ -582,7 +582,7 @@ class AMQPConnection(object):
                 # (as they don't know when they finish)
                 channel_object = self._channel_channels[channel]
 
-                if isinstance(frame.payload, (ChannelClosePayload, ChannelCloseOkPayload)):
+                if isinstance(frame.payload, ChannelClosePayload | ChannelCloseOkPayload):
                     is_unclean = isinstance(frame.payload, ChannelClosePayload)
                     logger.debug(f"Channel close received, {is_unclean=}")
 
@@ -597,7 +597,7 @@ class AMQPConnection(object):
                     continue
 
                 elif isinstance(
-                    frame.payload, (BasicDeliverPayload, BasicGetOkPayload, BasicGetEmptyPayload)
+                    frame.payload, BasicDeliverPayload | BasicGetOkPayload | BasicGetEmptyPayload
                 ):
                     # requires special logic
                     await self._enqueue_frame(channel_object, frame)
@@ -666,7 +666,7 @@ class AMQPConnection(object):
                             reply = await self._read_single_frame()
                         except EndOfStream:
                             raise AMQPStateError(
-                                f"Expected CloseOk, but connection failed to send it"
+                                "Expected CloseOk, but connection failed to send it"
                             )
 
                         if isinstance(reply, MethodFrame) and isinstance(
@@ -722,7 +722,6 @@ class AMQPConnection(object):
                     await pool._open(initial_size=initial_channels)
                     yield pool
                 finally:
-                    # noinspection PyAsyncCall
                     tg.cancel_scope.cancel()
 
                     with CancelScope(shield=True):
@@ -750,13 +749,13 @@ class AMQPConnection(object):
 
 
 async def _open_connection(
-    address: Union[str, PathLike],
+    address: str | PathLike,
     *,
     port: int = 6379,
     username: str = "guest",
     password: str = "guest",
     vhost: str = "/",
-    ssl_context: SSLContext = None,
+    ssl_context: SSLContext | None = None,
     **kwargs,
 ) -> AMQPConnection:
     """
@@ -769,13 +768,15 @@ async def _open_connection(
         sock = await anyio.connect_unix(path)
     else:
         logger.debug(f"Opening TCP connection to {address}:{port}")
-        sock = await anyio.connect_tcp(
-            address,
-            remote_port=port,
-            tls=ssl_context is not None,
-            ssl_context=ssl_context,
-            tls_standard_compatible=True,
-        )
+        if ssl_context is None:
+            sock = await anyio.connect_tcp(address, remote_port=port)
+        else:
+            sock = await anyio.connect_tcp(
+                address,
+                remote_port=port,
+                ssl_context=ssl_context,
+                tls_standard_compatible=True,
+            )
 
     connection = AMQPConnection(sock, **kwargs)
     # noinspection PyProtectedMember
@@ -783,15 +784,14 @@ async def _open_connection(
     return connection
 
 
-# noinspection PyIncorrectDocstring
 def open_connection(
-    address: Union[str, PathLike],
+    address: str | PathLike,
     *,
     port: int = 5672,
     username: str = "guest",
     password: str = "guest",
     virtual_host: str = "/",
-    ssl_context: SSLContext = None,
+    ssl_context: SSLContext | None = None,
     **kwargs,
 ) -> AsyncContextManager[AMQPConnection]:
     """

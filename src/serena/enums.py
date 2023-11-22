@@ -3,7 +3,7 @@ from enum import IntEnum
 try:
     from enum import StrEnum
 except ImportError:
-    from backports.strenum import StrEnum
+    from enum import StrEnum
 
 
 __all__ = (

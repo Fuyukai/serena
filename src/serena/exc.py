@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Type, Union
-
 from serena.enums import ReplyCode
 from serena.payloads.method import (
     ChannelClosePayload,
@@ -62,12 +60,10 @@ class MessageReturnedError(AMQPError):
         self.routing_key = routing_key
 
     def __str__(self):
-        msg = (
+        return (
             f"Message with routing key '{self.routing_key}' was returned from '{self.exchange}': "
             f"{self.reply_code.name}: {self.reply_text}"
         )
-
-        return msg
 
     __repr__ = __str__
 
@@ -79,7 +75,7 @@ class InvalidPayloadTypeError(AMQPStateError):
 
     __slots__ = ("expected", "actual")
 
-    def __init__(self, expected: Type[MethodPayload], actual: MethodPayload):
+    def __init__(self, expected: type[MethodPayload], actual: MethodPayload):
         self.expected = expected
         self.actual = actual
 
@@ -95,9 +91,7 @@ class UnexpectedCloseError(AMQPError):
     __slots__ = ("reply_code", "reply_message", "class_id", "method_id")
 
     @classmethod
-    def of(
-        cls, payload: Union[ConnectionClosePayload, ChannelClosePayload]
-    ) -> UnexpectedCloseError:
+    def of(cls, payload: ConnectionClosePayload | ChannelClosePayload) -> UnexpectedCloseError:
         """
         Creates a new :class:`.UnexpectedCloseError` from a close payload.
         """

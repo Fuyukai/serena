@@ -1,5 +1,6 @@
 import abc
-from typing import Any, AsyncContextManager, AsyncIterable, Optional, Union
+from collections.abc import AsyncIterable
+from typing import Any, AsyncContextManager
 
 from serena.enums import ExchangeType
 from serena.message import AMQPMessage
@@ -16,7 +17,7 @@ class ChannelLike(abc.ABC):
     async def exchange_declare(
         self,
         name: str,
-        type: Union[ExchangeType, str],
+        type: ExchangeType | str,
         *,
         passive: bool = False,
         durable: bool = False,
@@ -259,7 +260,7 @@ class ChannelLike(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def basic_get(self, queue: str, *, no_ack: bool = False) -> Optional[AMQPMessage]:
+    async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         """
         Gets a single message from a queue.
 
@@ -286,7 +287,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
     async def exchange_declare(
         self,
         name: str,
-        type: Union[ExchangeType, str],
+        type: ExchangeType | str,
         *,
         passive: bool = False,
         durable: bool = False,
@@ -415,5 +416,5 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             immediate=immediate,
         )
 
-    async def basic_get(self, queue: str, *, no_ack: bool = False) -> Optional[AMQPMessage]:
+    async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         return await self._delegate.basic_get(queue=queue, no_ack=no_ack)
