@@ -7,12 +7,12 @@ import logging
 import os
 import sys
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from functools import partial
 from os import PathLike
 from ssl import SSLContext
-from typing import AsyncContextManager
 
 import anyio
 import attr
@@ -150,7 +150,7 @@ class AMQPConnection:
         # negotiated data
         self._actual_heartbeat_interval = 0
         self._max_frame_size = desired_frame_size
-        self._server_capabilites = {}
+        self._server_capabilities = {}
 
         # list of 64-bit ints (as not to overflow long values and cause a bigint)
         # that is used to assign the next channel ID
@@ -193,7 +193,7 @@ class AMQPConnection:
         Checks if the server exposes a capability.
         """
 
-        return self._server_capabilites.get(name, False)
+        return self._server_capabilities.get(name, False)
 
     def heartbeat_statistics(self) -> HeartbeatStatistics:
         """
@@ -207,10 +207,11 @@ class AMQPConnection:
         Reads a single frame from the AMQP connection.
         """
 
+        # for some reason this isn't properly smart casted
         frame = self._parser.next_frame()
         if frame is not NEED_DATA:
             await checkpoint()
-            return frame
+            return frame  # type: ignore
 
         while True:
             data = await self._sock.receive(4096)
@@ -218,7 +219,7 @@ class AMQPConnection:
 
             frame = self._parser.next_frame()
             if frame is not NEED_DATA:
-                return frame
+                return frame  # type: ignore
 
     # bleh, this is just a hotfix for data contention. i could probably fix this by driving the
     # writer with a background task writer, but that seems like it would achieve the exact same
@@ -331,10 +332,12 @@ class AMQPConnection:
                 if not caps.get("publisher_confirms", False):  # pragma: no cover
                     raise AMQPError("Server does not support publisher confirms, which we require")
 
-                self._server_capabilites = caps
-                for cap, value in self._server_capabilites.items():
+                self._server_capabilities = caps
+                for cap, value in self._server_capabilities.items():
                     if value:
-                        logger.trace(f"Server supports capability {cap}")
+                        logger.trace(  # type: ignore
+                            f"Server supports capability {cap}"
+                        )
 
                 if "PLAIN" not in mechanisms:  # pragma: no cover
                     # we only speak plain (for now...)
@@ -402,8 +405,8 @@ class AMQPConnection:
                     # we are open
                     logger.info("AMQP connection is ready to go")
                     break
-                else:  # pragma: no cover
-                    raise InvalidPayloadTypeError(ConnectionOpenOkPayload, payload)
+
+                raise InvalidPayloadTypeError(ConnectionOpenOkPayload, payload)  # pragma: no cover
 
     async def _open_channel(self) -> Channel:
         """
@@ -581,8 +584,9 @@ class AMQPConnection:
                 # channelcloseok is handled here because channels can't deal with their own closure
                 # (as they don't know when they finish)
                 channel_object = self._channel_channels[channel]
+                payload = frame.payload
 
-                if isinstance(frame.payload, ChannelClosePayload | ChannelCloseOkPayload):
+                if isinstance(payload, ChannelClosePayload | ChannelCloseOkPayload):
                     is_unclean = isinstance(frame.payload, ChannelClosePayload)
                     logger.debug(f"Channel close received, {is_unclean=}")
 
@@ -596,7 +600,7 @@ class AMQPConnection:
 
                     continue
 
-                elif isinstance(
+                if isinstance(
                     frame.payload, BasicDeliverPayload | BasicGetOkPayload | BasicGetEmptyPayload
                 ):
                     # requires special logic
@@ -644,6 +648,8 @@ class AMQPConnection:
                 await self._send_method_frame(0, payload)
                 await self._close_ungracefully()
 
+                assert self._close_info is not None, "where's the close info???"
+
                 if self._close_info.reply_code != 200:
                     raise UnexpectedCloseError.of(self._close_info)
 
@@ -667,7 +673,7 @@ class AMQPConnection:
                         except EndOfStream:
                             raise AMQPStateError(
                                 "Expected CloseOk, but connection failed to send it"
-                            )
+                            ) from None
 
                         if isinstance(reply, MethodFrame) and isinstance(
                             reply.payload, ConnectionCloseOkPayload
@@ -677,7 +683,8 @@ class AMQPConnection:
                 finally:
                     await self._close_ungracefully()
 
-    def open_channel(self) -> AsyncContextManager[Channel]:
+    @asynccontextmanager
+    async def open_channel(self) -> AsyncGenerator[Channel, None]:
         """
         Opens a new channel.
 
@@ -687,23 +694,22 @@ class AMQPConnection:
         if not self.open:
             raise RuntimeError("The connection is not open")
 
-        @asynccontextmanager
-        async def cm():
-            channel = await self._open_channel()
-            try:
-                yield channel
-            finally:
-                # don't try and re-close the channel if the channel was closed server-side
+        channel = await self._open_channel()
+        try:
+            yield channel
+        finally:
+            # don't try and re-close the channel if the channel was closed server-side
 
-                if not channel._closed:
-                    channel._closed = True
+            if not channel._closed:
+                channel._closed = True
 
-                    with anyio.CancelScope(shield=True):
-                        await self._close_channel(channel.id)
+                with anyio.CancelScope(shield=True):
+                    await self._close_channel(channel.id)
 
-        return cm()
-
-    def open_channel_pool(self, initial_channels: int = 64) -> AsyncContextManager[ChannelPool]:
+    @asynccontextmanager
+    async def open_channel_pool(
+        self, initial_channels: int = 64
+    ) -> AsyncGenerator[ChannelPool, None]:
         """
         Opens a new channel pool.
 
@@ -711,23 +717,19 @@ class AMQPConnection:
         :return: An asynchronous context manager that will open a new channel pool.
         """
 
-        @asynccontextmanager
-        async def _do():
-            pool = ChannelPool(self, initial_channels)
+        pool = ChannelPool(self, initial_channels)
 
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(pool._open_channels)
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(pool._open_channels)
 
-                try:
-                    await pool._open(initial_size=initial_channels)
-                    yield pool
-                finally:
-                    tg.cancel_scope.cancel()
+            try:
+                await pool._open(initial_size=initial_channels)
+                yield pool
+            finally:
+                tg.cancel_scope.cancel()
 
-                    with CancelScope(shield=True):
-                        await pool._close()
-
-        return _do()
+                with CancelScope(shield=True):
+                    await pool._close()
 
     async def close(self, reply_code: int = 200, reply_text: str = "Normal close"):
         """
@@ -784,7 +786,8 @@ async def _open_connection(
     return connection
 
 
-def open_connection(
+@asynccontextmanager
+async def open_connection(
     address: str | PathLike,
     *,
     port: int = 5672,
@@ -793,7 +796,7 @@ def open_connection(
     virtual_host: str = "/",
     ssl_context: SSLContext | None = None,
     **kwargs,
-) -> AsyncContextManager[AMQPConnection]:
+) -> AsyncGenerator[AMQPConnection, None]:
     """
     Opens a new connection to the AMQP 0-9-1 server. This is an asynchronous context manager.
 
@@ -818,30 +821,26 @@ def open_connection(
     :param desired_frame_size: The maximum body message frame size desired.
     """
 
-    @asynccontextmanager
-    async def _do_open():
-        conn = await _open_connection(
-            address=address,
-            port=port,
-            username=username,
-            password=password,
-            vhost=virtual_host,
-            ssl_context=ssl_context,
-            **kwargs,
-        )
+    conn = await _open_connection(
+        address=address,
+        port=port,
+        username=username,
+        password=password,
+        vhost=virtual_host,
+        ssl_context=ssl_context,
+        **kwargs,
+    )
 
-        try:
-            async with anyio.create_task_group() as nursery:
-                conn._start_tasks(nursery)
-                try:
-                    yield conn
-                except BaseException as e:
-                    logger.error(f"Caught error {type(e).__qualname__}, closing connection")
-                    raise
-                finally:
-                    # noinspection PyAsyncCall
-                    nursery.cancel_scope.cancel()
-        finally:
-            await conn.close()
-
-    return _do_open()
+    try:
+        async with anyio.create_task_group() as nursery:
+            conn._start_tasks(nursery)
+            try:
+                yield conn
+            except BaseException as e:
+                logger.error(f"Caught error {type(e).__qualname__}, closing connection")
+                raise
+            finally:
+                # noinspection PyAsyncCall
+                nursery.cancel_scope.cancel()
+    finally:
+        await conn.close()

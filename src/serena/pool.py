@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterable
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import (
     TYPE_CHECKING,
     Any,
-    AsyncContextManager,
 )
 
 import anyio
@@ -97,7 +96,7 @@ class ChannelPool(ChannelLike):
             self._qwrite.send_nowait(channel)
 
     # re-exported so that pycharm likes the type annotation better
-    def checkout(self) -> AsyncContextManager[Channel]:
+    def checkout(self) -> AbstractAsyncContextManager[Channel]:
         """
         Checks out a new channel from the pool, and uses it persistently. The channel lifetime
         will be automatically managed for you.
@@ -135,7 +134,7 @@ class ChannelPool(ChannelLike):
         exclusive: bool = False,
         auto_ack: bool = True,
         **arguments: Any,
-    ) -> AsyncGenerator[AsyncIterable[AMQPMessage | None], None]:
+    ) -> AsyncGenerator[AsyncIterable[AMQPMessage], None]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
         iterator that yields incoming :class:`.AMQPMessage` instances.

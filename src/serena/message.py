@@ -79,13 +79,12 @@ class AMQPEnvelope:
         if isinstance(payload, BasicDeliverPayload):
             return cls.from_deliver(payload)
 
-        elif isinstance(payload, BasicGetOkPayload):
+        if isinstance(payload, BasicGetOkPayload):
             return cls.from_get(payload)
 
-        else:
-            raise TypeError(
-                f"Expected Basic.Deliver or Basic.Get-Ok, got {method_payload_name(payload)}"
-            )
+        raise TypeError(
+            f"Expected Basic.Deliver or Basic.Get-Ok, got {method_payload_name(payload)}"
+        )
 
 
 @attr.s(frozen=True, slots=True)

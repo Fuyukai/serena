@@ -184,7 +184,7 @@ class FrameParser:
         if self._processing_partial_packet:
             body, self._buffer = (
                 self._buffer[: self._bytes_remaining],
-                self._buffer[self._bytes_remaining :],
+                self._buffer[self._bytes_remaining:],
             )
             self._last_packet_buffer += body
             self._bytes_remaining -= len(body)
@@ -229,7 +229,7 @@ class FrameParser:
                 f"Received packet ({type_=} | {channel=} | {size=})"
             )
 
-            body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7 :]
+            body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7:]
 
             if len(body) < size:
                 # missing part of the packet, save and return later

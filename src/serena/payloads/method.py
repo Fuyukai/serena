@@ -206,7 +206,7 @@ class ConnectionClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))  # type: ignore
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
@@ -295,7 +295,7 @@ class ChannelClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))  # type: ignore
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
@@ -844,7 +844,7 @@ class BasicReturnPayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this message to be returned.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))
+    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))  # type: ignore
 
     #: The text for the error that caused this message to be returned.
     reply_text: str = attr.ib()

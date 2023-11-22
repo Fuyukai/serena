@@ -94,7 +94,7 @@ async def test_delete_in_use():
                 await group.start(consumer, channel, queue.name)
                 await channel.queue_delete(queue.name, if_unused=True)
 
-        assert isinstance(unwrapped := e.value.exceptions[0], UnexpectedCloseError)
+        assert isinstance(unwrapped := e.value.exceptions[0], UnexpectedCloseError)  # noqa: RUF018
         assert unwrapped.reply_code == ReplyCode.precondition_failed
 
 
@@ -125,4 +125,5 @@ async def test_queue_bind():
 
         await channel.basic_publish(exchange_name, routing_key="", body=b"test")
         message = await channel.basic_get(queue.name)
+        assert message
         assert message.body == b"test"

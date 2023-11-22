@@ -50,13 +50,15 @@ async def test_channel_pool_errors():
     Tests handling errors in the channel pool.
     """
 
-    async with open_connection("127.0.0.1") as conn:
-        async with conn.open_channel_pool(initial_channels=2) as pool:
-            with pytest.raises(UnexpectedCloseError):
-                await pool.basic_publish("abcdef", routing_key="", body=b"")
+    async with (
+        open_connection("127.0.0.1") as conn,
+        conn.open_channel_pool(initial_channels=2) as pool,
+    ):
+        with pytest.raises(UnexpectedCloseError):
+            await pool.basic_publish("abcdef", routing_key="", body=b"")
 
-            # kinda racey but it's consistent enough in my experience
-            assert pool.idle_channels == 1
-            # random sleep to make sure the background worker has time to enqueue the next channel
-            await anyio.sleep(2)
-            assert pool.idle_channels == 2
+        # kinda racey but it's consistent enough in my experience
+        assert pool.idle_channels == 1
+        # random sleep to make sure the background worker has time to enqueue the next channel
+        await anyio.sleep(2)
+        assert pool.idle_channels == 2

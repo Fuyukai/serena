@@ -72,6 +72,8 @@ async def test_acks():
 
         assert (await channel.queue_declare(name=queue.name, passive=True)).message_count == 1
         msg = await channel.basic_get(queue.name)
+        assert msg
+
         await msg.ack()
         assert (await channel.queue_declare(name=queue.name, passive=True)).message_count == 0
 

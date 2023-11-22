@@ -1,11 +1,15 @@
 import abc
 from collections.abc import AsyncIterable
-from typing import Any, AsyncContextManager
+from contextlib import AbstractAsyncContextManager
+from typing import TYPE_CHECKING, Any
 
 from serena.enums import ExchangeType
 from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import QueueDeclareOkPayload
+
+if TYPE_CHECKING:
+    from serena.channel import Channel
 
 
 class ChannelLike(abc.ABC):
@@ -206,7 +210,7 @@ class ChannelLike(abc.ABC):
         exclusive: bool = False,
         auto_ack: bool = True,
         **arguments: Any,
-    ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
+    ) -> AbstractAsyncContextManager[AsyncIterable[AMQPMessage]]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
         iterator that yields incoming :class:`.AMQPMessage` instances.
@@ -234,7 +238,7 @@ class ChannelLike(abc.ABC):
         routing_key: str,
         body: bytes,
         *,
-        header: BasicHeader = None,
+        header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
     ):
@@ -277,12 +281,12 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
     This is useful for being inherited from and adding new methods for convenience shortcuts.
     """
 
-    def __init__(self, channel: ChannelLike):
+    def __init__(self, channel: ChannelLike) -> None:
         """
         :param channel: The :class:`.ChannelLike` to delegate to.
         """
 
-        self._delegate = channel
+        self._delegate: ChannelLike = channel
 
     async def exchange_declare(
         self,
@@ -365,17 +369,6 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             queue_name=queue_name, exchange_name=exchange_name, routing_key=routing_key, **arguments
         )
 
-    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
-        return await self._delegate.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
-
-    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
-        return await self._delegate.basic_reject(delivery_tag=delivery_tag, requeue=requeue)
-
-    async def basic_nack(self, delivery_tag: int, *, multiple: bool = False, requeue: bool = False):
-        return await self._delegate.basic_nack(
-            delivery_tag=delivery_tag, multiple=multiple, requeue=requeue
-        )
-
     def basic_consume(
         self,
         queue_name: str,
@@ -386,7 +379,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
         exclusive: bool = False,
         auto_ack: bool = True,
         **arguments: Any,
-    ) -> AsyncContextManager[AsyncIterable[AMQPMessage]]:
+    ) -> AbstractAsyncContextManager[AsyncIterable[AMQPMessage]]:
         return self._delegate.basic_consume(
             queue_name=queue_name,
             consumer_tag=consumer_tag,
@@ -403,7 +396,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
         routing_key: str,
         body: bytes,
         *,
-        header: BasicHeader = None,
+        header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
     ):
@@ -418,3 +411,59 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
 
     async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         return await self._delegate.basic_get(queue=queue, no_ack=no_ack)
+
+
+class DefinitelyChannelDelegate(ChannelDelegate):
+    """
+    Like :class:`.ChannelDelegate`, but for something that is *definitely* a channel.
+    """
+
+    def __init__(self, channel: Channel) -> None:
+        self._delegate: Channel
+
+        super().__init__(channel)
+
+    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
+        """
+        Acknowledges AMQP messages.
+
+        :param delivery_tag: The delivery tag of the message to acknowledge.
+        :param multiple: If True, then all messages up to and including the message specified will
+                         be acknowledged, not just the message specified.
+        """
+
+        return await self._delegate.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
+
+    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
+        """
+        Rejects an AMQP message.
+
+        .. note::
+
+            If you are using RabbitMQ, you might want to use :meth:`~.Channel.nack` instead.
+
+        :param delivery_tag: The delivery tag of the message to acknowledge.
+        :param requeue: If True, then the rejected message will be requeued if possible.
+        """
+
+        return await self._delegate.basic_reject(delivery_tag=delivery_tag, requeue=requeue)
+
+    async def basic_nack(
+        self,
+        delivery_tag: int,
+        *,
+        multiple: bool = False,
+        requeue: bool = False,
+    ):
+        """
+        Rejects an AMQP message. This is a RabbitMQ-specific extension.
+
+        :param delivery_tag: The delivery tag of the message to acknowledge.
+        :param multiple: If True, then all messages up to and including the message specified will
+                         be acknowledged, not just the message specified.
+        :param requeue: If True, then the rejected message will be requeued if possible.
+        """
+
+        return await self._delegate.basic_nack(
+            delivery_tag=delivery_tag, multiple=multiple, requeue=requeue
+        )

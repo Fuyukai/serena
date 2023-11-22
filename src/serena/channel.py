@@ -7,7 +7,7 @@ from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
-    TypeVar,
+    override,
 )
 
 import anyio
@@ -67,8 +67,6 @@ from serena.payloads.method import (
 
 if TYPE_CHECKING:
     from serena.connection import AMQPConnection
-
-_PAYLOAD = TypeVar("_PAYLOAD", bound=MethodPayload)
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +152,7 @@ class Channel(ChannelLike):
 
         return self._delivery_send.statistics().current_buffer_used
 
-    def _check_closed(self):
+    def _check_closed(self) -> None:
         """
         Checks if the channel is closed.
         """
@@ -163,7 +161,7 @@ class Channel(ChannelLike):
             # todo: switch to our own exception?
             raise ClosedResourceError("This channel is closed")
 
-    async def _close(self, payload: ChannelClosePayload):
+    async def _close(self, payload: ChannelClosePayload | None) -> None:
         """
         Closes this channel.
         """
@@ -352,6 +350,7 @@ class Channel(ChannelLike):
         await self._close_event.wait()
 
     ## METHODS ##
+    @override
     async def exchange_declare(
         self,
         name: str,
@@ -397,6 +396,7 @@ class Channel(ChannelLike):
         await self._send_and_receive_frame(payload, ExchangeDeclareOkPayload)
         return payload.name
 
+    @override
     async def exchange_delete(
         self,
         name: str,
@@ -421,6 +421,7 @@ class Channel(ChannelLike):
 
         await self._send_and_receive_frame(payload, ExchangeDeleteOkPayload)
 
+    @override
     async def exchange_bind(
         self,
         destination: str,
@@ -453,6 +454,7 @@ class Channel(ChannelLike):
 
         await self._send_and_receive_frame(payload, ExchangeBindOkPayload)
 
+    @override
     async def exchange_unbind(
         self,
         destination: str,
@@ -485,6 +487,7 @@ class Channel(ChannelLike):
 
         await self._send_and_receive_frame(payload, ExchangeUnBindOkPayload)
 
+    @override
     async def queue_declare(
         self,
         name: str = "",
@@ -530,6 +533,7 @@ class Channel(ChannelLike):
         result = await self._send_and_receive_frame(payload, QueueDeclareOkPayload)
         return result.payload
 
+    @override
     async def queue_bind(
         self,
         queue_name: str,
@@ -558,6 +562,7 @@ class Channel(ChannelLike):
 
         await self._send_and_receive_frame(payload, QueueBindOkPayload)
 
+    @override
     async def queue_delete(
         self,
         queue_name: str,
@@ -585,6 +590,7 @@ class Channel(ChannelLike):
         result = await self._send_and_receive_frame(payload, QueueDeleteOkPayload)
         return result.payload.message_count
 
+    @override
     async def queue_purge(
         self,
         queue_name: str,
@@ -605,6 +611,7 @@ class Channel(ChannelLike):
         result = await self._send_and_receive_frame(payload, QueuePurgeOkPayload)
         return result.payload.message_count
 
+    @override
     async def queue_unbind(
         self,
         queue_name: str,
@@ -633,6 +640,7 @@ class Channel(ChannelLike):
         await self._send_and_receive_frame(payload, QueueUnbindOkPayload)
 
     @asynccontextmanager
+    @override
     async def basic_consume(
         self,
         queue_name: str,
@@ -643,7 +651,7 @@ class Channel(ChannelLike):
         exclusive: bool = False,
         auto_ack: bool = True,
         **arguments: Any,
-    ) -> AsyncGenerator[AsyncIterable[AMQPMessage | None], None]:
+    ) -> AsyncGenerator[AsyncIterable[AMQPMessage], None]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
         iterator that yields incoming :class:`.AMQPMessage` instances.
@@ -670,9 +678,13 @@ class Channel(ChannelLike):
         async def _agen():
             while True:
                 message = await self._receive_delivery_message()
+                if message is None:
+                    # what?
+                    continue
+
                 yield message
 
-                if auto_ack and message:
+                if auto_ack:
                     await self.basic_ack(message.envelope.delivery_tag)
 
         payload = BasicConsumePayload(
@@ -704,6 +716,7 @@ class Channel(ChannelLike):
 
                 self._is_consuming = False
 
+    @override
     async def basic_publish(
         self,
         exchange_name: str,
@@ -803,6 +816,9 @@ class Channel(ChannelLike):
 
             elif isinstance(payload, BasicNackPayload):
                 raise AMQPStateError("Server NACKed message to be published")
+
+    # note to self: these are only defined on Channel cos they make no sense to be defined on
+    # pools. oops!
 
     async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
         """

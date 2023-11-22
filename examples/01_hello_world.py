@@ -1,5 +1,4 @@
 import trio
-
 from serena import AMQPConnection, open_connection
 
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import struct
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from io import BytesIO
-from typing import Any, ContextManager, overload
+from typing import Any, overload
 
 
 class DecodingBuffer:
@@ -364,7 +364,7 @@ class EncodingBuffer:
     @overload
     def write_timestamp(self, value: int): ...
 
-    def write_timestamp(self, value):
+    def write_timestamp(self, value: datetime | int) -> None:
         """
         Writes a timestamp to the buffer.
         """
@@ -435,7 +435,7 @@ class EncodingBuffer:
         self._write(size)
         self._write(data)
 
-    def start_writing_table(self) -> ContextManager[TableWriter]:
+    def start_writing_table(self) -> AbstractContextManager[TableWriter]:
         """
         Writes a table to the stream. This is a context manager that allows writing key/values to
         a table.
