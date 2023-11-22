@@ -6,3 +6,8 @@ htmlcov/
 .coverage
 
 docs/_build
+.pytest_cache
+*.pyc
+dist/
+
+aaa.py
