@@ -1,3 +1,8 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
 [tool.poetry]
 name = "serena"
 version = "0.7.4"
@@ -12,28 +17,24 @@ classifiers = [
 readme = "README.rst"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-anyio = ">=3.6.2"
+python = ">=3.11"
+anyio = ">=4.0.0"
 attrs = ">=21.4.0"
-"backports.strenum" = { version = "^1.1.1",  python = "<3.11" }
 
 [tool.poetry.group.docs.dependencies]
-sphinx = "^6.1"
-sphinx-rtd-theme = "^1.2.2"
-sphinxcontrib-trio = "^1.1.2"
-sphinx-inline-tabs = "^2023.4.21"
-sphinx-autodoc-typehints = "^1.23.0"
+sphinx = ">=6.1"
+sphinx-rtd-theme = ">=1.2.2"
+sphinxcontrib-trio = ">=1.1.2"
+sphinx-inline-tabs = ">=2023.4.21"
+sphinx-autodoc-typehints = ">=1.23.0"
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.3.1"
-trio = "^0.22.0"
-isort = "^5.12.0"
-pytest-cov = "^4.1.0"
-
-[tool.poetry.extras]
-docs = ["Sphinx", "sphinxcontrib-trio", "sphinx-autodoc-typehints", "sphinx-rtd-theme",
-    "sphinx-inline-tabs"]
+pytest = ">=7.3.1"
+trio = ">=0.22.0"
+pytest-cov = ">=4.1.0"
+ruff = "^0.1.6"
+mypy = "^1.7.0"
 
 
 [tool.pytest.ini_options]
@@ -60,12 +61,51 @@ exclude_lines = [
     "raise InvalidPayloadTypeError",
 ]
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.isort]
-profile = "black"
-
-[tool.black]
+[tool.ruff]
+target-version = "py311"
+respect-gitignore = true
+# fix = true
+src = ["src/serena"]
 line-length = 100
+show-source = true
+
+select = [
+  "RUF",
+  "F",
+  "E",
+  "W",
+  "I",
+  "UP",
+  "B",
+  "YTT",
+  "ASYNC",
+  "TRIO",
+  "PYI",
+  "SIM",
+  "RET",
+  "PERF",
+]
+ignore = [
+    "W291",  # SHUT THE FUCK UP WHEN I'M TYPING COMMENTS
+    "W293",
+    "E266"
+]
+
+[tool.ruff.isort]
+combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+local_partial_types = true
+warn_unused_ignores = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_return_any = true
+
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+check_untyped_defs = true
