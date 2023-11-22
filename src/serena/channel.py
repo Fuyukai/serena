@@ -10,8 +10,12 @@ from typing import (
     Self,
     TypeVar,
     cast,
-    override,
 )
+
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
 
 import anyio
 import outcome
