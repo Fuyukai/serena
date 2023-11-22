@@ -14,6 +14,15 @@ from serena.payloads.encoding import (
 )
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
 
+# mypy - doesn't understand converter=ReplyCode
+# pyright - does understand it, but thinks its bullshit
+# if we use a lambda, mypy gets pissy with an unannotated function error.
+# so NAMED FUNCTION IT IS!
+
+
+def _fuck_fuck_fuck(what: int) -> ReplyCode:
+    return ReplyCode(what)
+
 
 @attr.s(frozen=True, slots=True, init=True)
 class MethodPayload(abc.ABC):
@@ -206,7 +215,7 @@ class ConnectionClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))  # type: ignore
+    reply_code: ReplyCode = attr.ib(converter=_fuck_fuck_fuck, metadata=aq_type("short"))
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
@@ -295,7 +304,7 @@ class ChannelClosePayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this close.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))  # type: ignore
+    reply_code: ReplyCode = attr.ib(converter=_fuck_fuck_fuck, metadata=aq_type("short"))
 
     #: The text for the error that caused this close.
     reply_text: str = attr.ib()
@@ -844,7 +853,7 @@ class BasicReturnPayload(MethodPayload):
     is_client_side = True
 
     #: The code for the error that caused this message to be returned.
-    reply_code: ReplyCode = attr.ib(converter=ReplyCode, metadata=aq_type("short"))  # type: ignore
+    reply_code: ReplyCode = attr.ib(converter=_fuck_fuck_fuck, metadata=aq_type("short"))
 
     #: The text for the error that caused this message to be returned.
     reply_text: str = attr.ib()
@@ -1022,7 +1031,7 @@ class ConfirmSelectOkPayload(MethodPayload):
     # empty body
 
 
-PAYLOAD_TYPES = {
+PAYLOAD_TYPES: dict[ClassID, dict[int, type[MethodPayload]]] = {
     ClassID.CONNECTION: {
         ConnectionStartPayload.method: ConnectionStartPayload,
         ConnectionStartOkPayload.method: ConnectionStartOkPayload,
@@ -1106,7 +1115,7 @@ def deserialise_payload(body: bytes) -> MethodPayload:
     except KeyError:
         raise KeyError(f"Unknown method: {klass.name}/{method}") from None
 
-    attr.resolve_types(payload_klass)
+    attr.resolve_types(payload_klass)  # type: ignore
     fields = attr.fields(payload_klass)
     init_params = {}
     buffer = DecodingBuffer(rest)
@@ -1114,7 +1123,7 @@ def deserialise_payload(body: bytes) -> MethodPayload:
     for field in fields:
         init_params[field.name] = decode_attrs_attribute(buffer, field)
 
-    return payload_klass(**init_params)  # type: ignore
+    return payload_klass(**init_params)
 
 
 def serialise_payload(payload: MethodPayload) -> bytes:
@@ -1123,7 +1132,7 @@ def serialise_payload(payload: MethodPayload) -> bytes:
     """
 
     typ = type(payload)
-    attr.resolve_types(typ)
+    attr.resolve_types(typ)  # type: ignore
 
     header = typ.klass.to_bytes(2, byteorder="big") + typ.method.to_bytes(2, byteorder="big")
 
@@ -1136,7 +1145,7 @@ def serialise_payload(payload: MethodPayload) -> bytes:
     return header + buf.get_data()
 
 
-def method_payload_name(payload: MethodPayload):
+def method_payload_name(payload: MethodPayload) -> str:
     """
     Gets the name of a method payload.
     """

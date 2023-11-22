@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from types import UnionType
 from typing import Any, Union, get_args, get_origin
 
@@ -6,11 +8,11 @@ from attr import Attribute
 from serena.utils.buffer import DecodingBuffer, EncodingBuffer
 
 
-def aq_type(name):
+def aq_type(name: str) -> dict[str, str]:
     return {"amqp_type": name}
 
 
-def encode_attrs_attribute(buf: EncodingBuffer, att: Attribute, value: Any):
+def encode_attrs_attribute(buf: EncodingBuffer, att: Attribute[Any], value: Any) -> None:
     """
     Encodes an attrs attribute on a class.
 
@@ -27,16 +29,16 @@ def encode_attrs_attribute(buf: EncodingBuffer, att: Attribute, value: Any):
         field_type = get_origin(unwrapped_field_type) or unwrapped_field_type
 
     if field_type is str:
-        fn = buf.write_short_string
+        buf.write_short_string(value)
 
     elif field_type is bytes:
-        fn = buf.write_long_string
+        buf.write_long_string(value)
 
     elif field_type is bool:
-        fn = buf.write_bit
+        buf.write_bit(value)
 
     elif field_type is dict:
-        fn = buf.write_table
+        buf.write_table(value)
 
     elif field_type is list:
         # todo
@@ -47,12 +49,10 @@ def encode_attrs_attribute(buf: EncodingBuffer, att: Attribute, value: Any):
         if not type_:  # not an amqp field, probably default field?
             return
 
-        fn = getattr(buf, f"write_{type_}")
-
-    fn(value)
+        getattr(buf, f"write_{type_}")(value)
 
 
-def decode_attrs_attribute(buf: DecodingBuffer, att: Attribute) -> Any:
+def decode_attrs_attribute(buf: DecodingBuffer, att: Attribute[Any]) -> Any:
     """
     Decodes an attrs field on a class.
 
@@ -69,25 +69,22 @@ def decode_attrs_attribute(buf: DecodingBuffer, att: Attribute) -> Any:
         field_type = get_origin(unwrapped_field_type) or unwrapped_field_type
 
     if field_type is str:
-        fn = buf.read_short_string
+        return buf.read_short_string()
 
-    elif field_type is bytes:
-        fn = buf.read_long_string
+    if field_type is bytes:
+        return buf.read_long_string()
 
-    elif field_type is bool:
-        fn = buf.read_bit
+    if field_type is bool:
+        return buf.read_bit()
 
-    elif field_type is dict:
-        fn = buf.read_table
+    if field_type is dict:
+        return buf.read_table()
 
-    elif field_type is list:
-        fn = buf.read_array
+    if field_type is list:
+        return buf.read_array()
 
-    else:
-        type_ = att.metadata.get("amqp_type")
-        if not type_:  # not an amqp field, probably default field?
-            return None
+    type_ = att.metadata.get("amqp_type")
+    if not type_:  # not an amqp field, probably default field?
+        return None
 
-        fn = getattr(buf, f"read_{type_}")
-
-    return fn()
+    return getattr(buf, f"read_{type_}")()

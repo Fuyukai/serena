@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Self
+
 from serena.enums import ReplyCode
 from serena.payloads.method import (
     ChannelClosePayload,
@@ -59,13 +62,13 @@ class MessageReturnedError(AMQPError):
         #: The routing key the message was using.
         self.routing_key = routing_key
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"Message with routing key '{self.routing_key}' was returned from '{self.exchange}': "
             f"{self.reply_code.name}: {self.reply_text}"
         )
 
-    __repr__ = __str__
+    __repr__: Callable[[Self], str] = __str__
 
 
 class InvalidPayloadTypeError(AMQPStateError):
@@ -76,8 +79,8 @@ class InvalidPayloadTypeError(AMQPStateError):
     __slots__ = ("expected", "actual")
 
     def __init__(self, expected: type[MethodPayload], actual: MethodPayload):
-        self.expected = expected
-        self.actual = actual
+        self.expected: type[MethodPayload] = expected
+        self.actual: MethodPayload = actual
 
         message = f"Expected {expected.__name__}, got {method_payload_name(actual)}"
         super().__init__(message)
@@ -111,14 +114,14 @@ class UnexpectedCloseError(AMQPError):
         method_id: int,
     ):
         #: The server-provided error code.
-        self.reply_code = reply_code
+        self.reply_code: ReplyCode = reply_code
         #: The server-provided error text.
-        self.reply_message = reply_message
+        self.reply_message: str = reply_message
 
         #: The class ID of the method that caused this error.
-        self.class_id = class_id
+        self.class_id: int = class_id
         #: The method ID of the method that caused this error.
-        self.method_id = method_id
+        self.method_id: int = method_id
 
         message = f"{reply_code.name}: {reply_message}"
         if class_id > 0:

@@ -7,6 +7,9 @@ from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
+    Self,
+    TypeVar,
+    cast,
     override,
 )
 
@@ -68,7 +71,9 @@ from serena.payloads.method import (
 if TYPE_CHECKING:
     from serena.connection import AMQPConnection
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
+
+PayloadType = TypeVar("PayloadType", bound=MethodPayload)
 
 
 # noinspection PyProtectedMember
@@ -97,9 +102,9 @@ class Channel(ChannelLike):
         self._close_event = Event()
 
         # no buffer as these are for events that should return immediately
-        self._send, self._receive = anyio.create_memory_object_stream(0)
+        self._send, self._receive = anyio.create_memory_object_stream[MethodFrame[MethodPayload]](0)
 
-        self._delivery_send, self._delivery_receive = anyio.create_memory_object_stream(
+        self._delivery_send, self._delivery_receive = anyio.create_memory_object_stream[Frame](
             max_buffer_size=stream_buffer_size
         )
 
@@ -115,10 +120,10 @@ class Channel(ChannelLike):
         # used to count acks
         self._message_counter = 0
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"<Channel id={self.id} buffered={self.current_buffer_size}>"
 
-    __repr__ = __str__
+    __repr__: Callable[[Self], str] = __str__
 
     @property
     def id(self) -> int:
@@ -176,14 +181,14 @@ class Channel(ChannelLike):
         # aclose doesn't seem to checkpoint...
         await checkpoint()
 
-    def _enqueue_regular(self, frame: MethodFrame):
+    def _enqueue_regular(self, frame: MethodFrame[MethodPayload]) -> None:
         """
         Enqueues a regular method frame.
         """
 
         self._send.send_nowait(frame)
 
-    async def _enqueue_delivery(self, frame: Frame):
+    async def _enqueue_delivery(self, frame: Frame) -> None:
         """
         Enqueues a delivery frame.
         """
@@ -242,7 +247,7 @@ class Channel(ChannelLike):
                     raise AMQPStateError(f"Expected a header frame, got {next_frame} instead")
 
                 # explicit type hint as pycharm incorrectly infers based on the previous if check
-                payload: ContentHeaderPayload = next_frame.payload  # type: ignore
+                payload: ContentHeaderPayload = next_frame.payload
                 if payload.class_id != method.payload.klass:
                     raise AMQPStateError(
                         f"Class mismatch ({payload.class_id} != {method.payload.klass})"
@@ -256,7 +261,7 @@ class Channel(ChannelLike):
 
                 body += next_frame.data
 
-    async def _receive_frame(self) -> MethodFrame:
+    async def _receive_frame(self) -> MethodFrame[MethodPayload]:
         """
         Receives a single frame from the channel.
         """
@@ -275,7 +280,7 @@ class Channel(ChannelLike):
         # noinspection PyAsyncCall
         return frame
 
-    async def _wait_until_open(self):
+    async def _wait_until_open(self) -> None:
         """
         Waits until the channel is open.
         """
@@ -289,7 +294,7 @@ class Channel(ChannelLike):
 
         self._open = True
 
-    async def _send_single_frame(self, payload: MethodPayload):
+    async def _send_single_frame(self, payload: MethodPayload) -> None:
         """
         Sends a single frame to the connection. This won't wait for a response.
         """
@@ -297,9 +302,9 @@ class Channel(ChannelLike):
         async with self._lock:
             await self._connection._send_method_frame(self._channel_id, payload)
 
-    async def _send_and_receive[Ret: MethodPayload](
-        self, callable: Callable[[], Awaitable[None]], expected: type[Ret] | None
-    ) -> MethodFrame[Ret]:
+    async def _send_and_receive(
+        self, callable: Callable[[], Awaitable[None]], expected: type[PayloadType] | None
+    ) -> MethodFrame[PayloadType]:
         """
         Sends and receives a payload.
 
@@ -308,9 +313,9 @@ class Channel(ChannelLike):
         :return: A :class:`.MethodFrame` that was returned as a result.
         """
 
-        returned_frame: Value[MethodFrame[Ret]] | Error = None  # type: ignore
+        returned_frame: Value[MethodFrame[MethodPayload]] | Error = None  # type: ignore
 
-        async def _closure(task_status: TaskStatus):
+        async def _closure(task_status: TaskStatus[None]) -> None:
             task_status.started()
 
             nonlocal returned_frame
@@ -325,11 +330,12 @@ class Channel(ChannelLike):
         if expected is not None and not isinstance(returned.payload, expected):
             raise InvalidPayloadTypeError(expected, returned.payload)
 
-        return returned
+        # safe cast, we checked the type above.
+        return cast(MethodFrame[PayloadType], returned)
 
-    async def _send_and_receive_frame[ReturnedPayload: MethodPayload](
-        self, payload: MethodPayload, expected_type: type[ReturnedPayload] | None
-    ) -> MethodFrame[ReturnedPayload]:
+    async def _send_and_receive_frame(
+        self, payload: MethodPayload, expected_type: type[PayloadType] | None
+    ) -> MethodFrame[PayloadType]:
         """
         Sends and receives a method payload.
 
@@ -342,7 +348,7 @@ class Channel(ChannelLike):
             fn = partial(self._connection._send_method_frame, self._channel_id, payload)
             return await self._send_and_receive(fn, expected_type)
 
-    async def wait_until_closed(self):
+    async def wait_until_closed(self) -> None:
         """
         Waits until the channel is closed.
         """
@@ -675,7 +681,7 @@ class Channel(ChannelLike):
         if self._is_consuming:
             raise AMQPStateError("Cannot start two consumers on the same channel")
 
-        async def _agen():
+        async def _agen() -> AsyncGenerator[AMQPMessage, None]:
             while True:
                 message = await self._receive_delivery_message()
                 if message is None:
@@ -726,7 +732,7 @@ class Channel(ChannelLike):
         header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
-    ):
+    ) -> None:
         """
         Publishes a message to a specific exchange.
 
@@ -766,6 +772,7 @@ class Channel(ChannelLike):
 
             # 2) header frame
             headers = header or BasicHeader()
+            response: MethodFrame[MethodPayload]
             if body:
                 # Body is not empty, we send_and_receive with the body and not the headers.
                 await self._connection._send_header_frame(
@@ -820,7 +827,7 @@ class Channel(ChannelLike):
     # note to self: these are only defined on Channel cos they make no sense to be defined on
     # pools. oops!
 
-    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
+    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False) -> None:
         """
         Acknowledges AMQP messages.
 
@@ -832,7 +839,7 @@ class Channel(ChannelLike):
         payload = BasicAckPayload(delivery_tag, multiple)
         await self._send_single_frame(payload)
 
-    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
+    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True) -> None:
         """
         Rejects an AMQP message.
 
@@ -853,7 +860,7 @@ class Channel(ChannelLike):
         *,
         multiple: bool = False,
         requeue: bool = False,
-    ):
+    ) -> None:
         """
         Rejects an AMQP message. This is a RabbitMQ-specific extension.
 

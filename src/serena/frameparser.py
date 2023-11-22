@@ -28,7 +28,7 @@ class _NEED_DATA:
 #: A special singleton object used if the parser needs more data.
 NEED_DATA = _NEED_DATA()
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # Dear RabbitMQ authors:
 # Fuck you. I fucking HATE you. Implement the FUCKING SPEC PROPERLY.
@@ -48,7 +48,7 @@ class FrameParser:
     the low-level wire processing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._buffer: bytearray = bytearray()
         self._processing_partial_packet = False
 
@@ -66,21 +66,21 @@ class FrameParser:
         """
 
         if type == METHOD_FRAME:
-            decoded_payload = deserialise_payload(payload)
-            frame = MethodFrame(channel_id=channel, payload=decoded_payload)
+            method_payload = deserialise_payload(payload)
+            frame = MethodFrame(channel_id=channel, payload=method_payload)
             logger.trace(  # type: ignore
-                f"S#{channel}->C FRAME (METHOD): {method_payload_name(decoded_payload)} "
+                f"S#{channel}->C FRAME (METHOD): {method_payload_name(method_payload)} "
                 f"({len(payload)}B)"
             )
             return frame
 
         if type == HEADER_FRAME:
-            decoded_payload = deserialise_basic_header(payload)
+            content_header = deserialise_basic_header(payload)
             logger.trace(  # type: ignore
-                f"S#{channel}->C FRAME (HEADER): {decoded_payload.class_id.name} ("
+                f"S#{channel}->C FRAME (HEADER): {content_header.class_id.name} ("
                 f"{len(payload)} bytes)"
             )
-            return ContentHeaderFrame(channel_id=channel, payload=decoded_payload)
+            return ContentHeaderFrame(channel_id=channel, payload=content_header)
 
         if type == BODY_FRAME:
             logger.trace(  # type: ignore
@@ -166,7 +166,7 @@ class FrameParser:
 
         return frames
 
-    def receive_data(self, data: bytes):
+    def receive_data(self, data: bytes) -> None:
         """
         Receives incoming data from the AMQP server.
         """
@@ -184,7 +184,7 @@ class FrameParser:
         if self._processing_partial_packet:
             body, self._buffer = (
                 self._buffer[: self._bytes_remaining],
-                self._buffer[self._bytes_remaining:],
+                self._buffer[self._bytes_remaining :],
             )
             self._last_packet_buffer += body
             self._bytes_remaining -= len(body)
@@ -229,7 +229,7 @@ class FrameParser:
                 f"Received packet ({type_=} | {channel=} | {size=})"
             )
 
-            body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7:]
+            body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7 :]
 
             if len(body) < size:
                 # missing part of the packet, save and return later

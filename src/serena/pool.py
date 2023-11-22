@@ -5,6 +5,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import (
     TYPE_CHECKING,
     Any,
+    NoReturn,
 )
 
 import anyio
@@ -56,10 +57,10 @@ class ChannelPool(ChannelLike):
 
         return int(self._qread.statistics().max_buffer_size)
 
-    def _return_channel(self, channel):
+    def _return_channel(self, channel: Channel) -> None:
         self._qwrite.send_nowait(channel)
 
-    async def _open(self, initial_size: int):
+    async def _open(self, initial_size: int) -> None:
         """
         Opens the pool and adds channels.
         """
@@ -68,7 +69,7 @@ class ChannelPool(ChannelLike):
             # noinspection PyAsyncCall
             self._qwrite.send_nowait(await self._conn._open_channel())
 
-    async def _close(self):
+    async def _close(self) -> None:
         """
         Closes all channels in the pool.
         """
@@ -84,7 +85,7 @@ class ChannelPool(ChannelLike):
                 nursery.start_soon(next_channel.wait_until_closed)
                 await self._conn._close_channel(next_channel.id)
 
-    async def _open_channels(self):
+    async def _open_channels(self) -> NoReturn:
         """
         Opens channels in an infinite loop.
         """
@@ -105,7 +106,7 @@ class ChannelPool(ChannelLike):
         return self._checkout()
 
     @asynccontextmanager
-    async def _checkout(self):
+    async def _checkout(self) -> AsyncGenerator[Channel, None]:
         channel = await self._qread.receive()
 
         try:
@@ -190,7 +191,7 @@ class ChannelPool(ChannelLike):
         header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
-    ):
+    ) -> None:
         """
         Publishes a message to a specific exchange.
 

@@ -12,3 +12,4 @@ dist/
 
 aaa.py
 .ruff_cache
+.mypy_cache

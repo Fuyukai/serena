@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from functools import partial
 from os import PathLike
 from ssl import SSLContext
+from typing import Any
 
 import anyio
 import attr
@@ -104,7 +105,7 @@ class HeartbeatStatistics:
 
         return self.cur_heartbeat_mn - self.prev_heartbeat_mn
 
-    def update(self):
+    def update(self) -> None:
         self.heartbeat_count += 1
 
         self.prev_heartbeat_mn = self.cur_heartbeat_mn
@@ -127,7 +128,7 @@ class AMQPConnection:
         heartbeat_interval: int = 60,
         channel_buffer_size: int = 48,  # reasonable default
         desired_frame_size: int = 131072,
-    ):
+    ) -> None:
         """
         :param stream: The :class:`.ByteStream` to use.
         :param heartbeat_interval: The heartbeat interval to negotiate with, in seconds.
@@ -150,7 +151,7 @@ class AMQPConnection:
         # negotiated data
         self._actual_heartbeat_interval = 0
         self._max_frame_size = desired_frame_size
-        self._server_capabilities = {}
+        self._server_capabilities: dict[str, bool] = {}
 
         # list of 64-bit ints (as not to overflow long values and cause a bigint)
         # that is used to assign the next channel ID
@@ -165,7 +166,7 @@ class AMQPConnection:
         self._heartbeat_stats = HeartbeatStatistics()
 
     @staticmethod
-    def get_client_properties():
+    def get_client_properties() -> dict[str, Any]:  # TODO: typeddict?
         version = importlib.metadata.version("serena")
 
         return {
@@ -224,11 +225,11 @@ class AMQPConnection:
     # bleh, this is just a hotfix for data contention. i could probably fix this by driving the
     # writer with a background task writer, but that seems like it would achieve the exact same
     # thing...?
-    async def _send(self, data: bytes):
+    async def _send(self, data: bytes) -> None:
         async with self._write_lock:
             await self._sock.send(data)
 
-    async def _send_method_frame(self, channel: int, payload: MethodPayload):
+    async def _send_method_frame(self, channel: int, payload: MethodPayload) -> None:
         """
         Sends a single method frame.
         """
@@ -243,7 +244,7 @@ class AMQPConnection:
         method_klass: ClassID,
         body_length: int,
         headers: BasicHeader,
-    ):
+    ) -> None:
         """
         Sends a single header frame.
         """
@@ -251,7 +252,7 @@ class AMQPConnection:
         data = self._parser.write_header_frame(channel, method_klass, body_length, headers)
         await self._send(data)
 
-    async def _send_body_frames(self, channel: int, body: bytes):
+    async def _send_body_frames(self, channel: int, body: bytes) -> None:
         """
         Sends multiple body frames.
         """
@@ -265,7 +266,7 @@ class AMQPConnection:
         for frame in data:
             await self._send(frame)
 
-    async def _close_ungracefully(self):
+    async def _close_ungracefully(self) -> None:
         """
         Closes the connection ungracefully.
         """
@@ -278,7 +279,7 @@ class AMQPConnection:
         finally:
             self._closed = True
 
-    async def _do_startup_handshake(self, username: str, password: str, vhost: str):
+    async def _do_startup_handshake(self, username: str, password: str, vhost: str) -> None:
         """
         Does the startup handshake.
         """
@@ -452,7 +453,7 @@ class AMQPConnection:
 
         return channel_object
 
-    async def _close_channel(self, id: int):
+    async def _close_channel(self, id: int) -> None:
         """
         Closes a channel.
         """
@@ -467,7 +468,7 @@ class AMQPConnection:
         )
         await self._send_method_frame(id, frame)
 
-    async def _handle_control_frame(self, frame: MethodFrame):
+    async def _handle_control_frame(self, frame: MethodFrame[MethodPayload]) -> None:
         """
         Handles a control frame.
         """
@@ -485,7 +486,7 @@ class AMQPConnection:
                 # noinspection PyAsyncCall
                 self._cancel_scope.cancel()
 
-    async def _remove_channel(self, channel_id: int, payload: ChannelClosePayload | None):
+    async def _remove_channel(self, channel_id: int, payload: ChannelClosePayload | None) -> None:
         """
         Removes a channel.
         """
@@ -494,7 +495,7 @@ class AMQPConnection:
         chan = self._channel_channels.pop(channel_id)
         await chan._close(payload)
 
-    async def _enqueue_frame(self, channel: Channel, frame: Frame):
+    async def _enqueue_frame(self, channel: Channel, frame: Frame) -> None:
         """
         Enqueues a frame onto the channel object.
 
@@ -530,7 +531,7 @@ class AMQPConnection:
         logger.debug(f"Enqueuing frame on blocked channel {channel.id}")
         return await channel._enqueue_delivery(frame)
 
-    async def _heartbeat_loop(self):
+    async def _heartbeat_loop(self) -> None:
         """
         Sends heartbeats to the AMQP server.
         """
@@ -543,7 +544,7 @@ class AMQPConnection:
             await self._send(b"\x08\x00\x00\x00\x00\x00\x00\xCE")
             await sleep(self._heartbeat_interval / 2)
 
-    async def _listen_for_messages(self):
+    async def _listen_for_messages(self) -> None:
         """
         Listens for messages infinitely. This is the primary driving loop of the connection.
         """
@@ -577,7 +578,7 @@ class AMQPConnection:
                 # intercept control frames, e.g. close payloads
                 channel = frame.channel_id
                 if channel == 0:
-                    await self._handle_control_frame(frame)  # type: ignore
+                    await self._handle_control_frame(frame)
                     continue
 
                 # we intercept certain control frames
@@ -622,7 +623,7 @@ class AMQPConnection:
                 channel_object = self._channel_channels[channel]
                 await self._enqueue_frame(channel_object, frame)
 
-    def _start_tasks(self, nursery: TaskGroup):
+    def _start_tasks(self, nursery: TaskGroup) -> None:
         """
         Starts the background tasks for this connection.
         """
@@ -630,7 +631,7 @@ class AMQPConnection:
         nursery.start_soon(self._listen_for_messages)
         nursery.start_soon(self._heartbeat_loop)
 
-    async def _close(self, reply_code: int = 200, reply_text: str = "Normal close"):
+    async def _close(self, reply_code: int = 200, reply_text: str = "Normal close") -> None:
         if self._closed:
             await checkpoint()
             return
@@ -644,8 +645,7 @@ class AMQPConnection:
             # send a CloseOk method if the server requested our closure
             if self._server_requested_close:
                 logger.debug("Acknowledging server close...")
-                payload = ConnectionCloseOkPayload()
-                await self._send_method_frame(0, payload)
+                await self._send_method_frame(0, ConnectionCloseOkPayload())
                 await self._close_ungracefully()
 
                 assert self._close_info is not None, "where's the close info???"
@@ -656,11 +656,15 @@ class AMQPConnection:
             else:
                 logger.debug("Sending close payload...")
 
-                payload = ConnectionClosePayload(
-                    reply_code=ReplyCode(reply_code), reply_text=reply_text, class_id=0, method_id=0
+                await self._send_method_frame(
+                    0,
+                    ConnectionClosePayload(
+                        reply_code=ReplyCode(reply_code),
+                        reply_text=reply_text,
+                        class_id=0,
+                        method_id=0,
+                    ),
                 )
-
-                await self._send_method_frame(0, payload)
 
                 try:
                     while True:
@@ -731,7 +735,7 @@ class AMQPConnection:
                 with CancelScope(shield=True):
                     await pool._close()
 
-    async def close(self, reply_code: int = 200, reply_text: str = "Normal close"):
+    async def close(self, reply_code: int = 200, reply_text: str = "Normal close") -> None:
         """
         Closes the connection. This method is idempotent.
 
@@ -751,18 +755,20 @@ class AMQPConnection:
 
 
 async def _open_connection(
-    address: str | PathLike,
+    address: str | PathLike[str],
     *,
     port: int = 6379,
     username: str = "guest",
     password: str = "guest",
     vhost: str = "/",
     ssl_context: SSLContext | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> AMQPConnection:
     """
     Actually implements opening the connection and performing the startup handshake.
     """
+
+    sock: ByteStream
 
     if isinstance(address, os.PathLike) or address.startswith("/"):
         path = os.fspath(address)
@@ -781,21 +787,20 @@ async def _open_connection(
             )
 
     connection = AMQPConnection(sock, **kwargs)
-    # noinspection PyProtectedMember
     await connection._do_startup_handshake(username, password, vhost)
     return connection
 
 
 @asynccontextmanager
 async def open_connection(
-    address: str | PathLike,
+    address: str | PathLike[str],
     *,
     port: int = 5672,
     username: str = "guest",
     password: str = "guest",
     virtual_host: str = "/",
     ssl_context: SSLContext | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> AsyncGenerator[AMQPConnection, None]:
     """
     Opens a new connection to the AMQP 0-9-1 server. This is an asynchronous context manager.

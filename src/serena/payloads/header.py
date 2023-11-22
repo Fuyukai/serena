@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+from collections.abc import Sequence
 from typing import Any
 
 import attr
@@ -106,8 +107,8 @@ def deserialise_basic_header(payload: bytes) -> ContentHeaderPayload:
         payload[14:],
     )
 
-    attr.resolve_types(BasicHeader)
-    fields: tuple[attr.Attribute] = attr.fields(BasicHeader)
+    attr.resolve_types(BasicHeader)  # type: ignore
+    fields: Sequence[attr.Attribute[Any | None]] = attr.fields(BasicHeader)  # type: ignore
     buffer = DecodingBuffer(rest)
 
     params = {}
@@ -123,7 +124,7 @@ def deserialise_basic_header(payload: bytes) -> ContentHeaderPayload:
     return ContentHeaderPayload(class_id=klass, full_size=body_size, flags=flags, payload=header)
 
 
-def serialise_basic_header(klass_id: ClassID, body_size: int, body: BasicHeader):
+def serialise_basic_header(klass_id: ClassID, body_size: int, body: BasicHeader) -> bytes:
     """
     Serialises a Basic content header into a byte array.
 
@@ -132,8 +133,9 @@ def serialise_basic_header(klass_id: ClassID, body_size: int, body: BasicHeader)
     :param body: The header body.
     """
 
-    attr.resolve_types(BasicHeader)
-    fields: tuple[attr.Attribute] = attr.fields(BasicHeader)
+    # yikes, attrs type hints kinda suck here?
+    attr.resolve_types(BasicHeader)  # type: ignore
+    fields: Sequence[attr.Attribute[Any | None]] = attr.fields(BasicHeader)  # type: ignore
     buffer = EncodingBuffer()
 
     flags = 0

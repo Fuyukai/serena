@@ -1,6 +1,9 @@
+# mypy: disable-error-code="no-any-return"
+
 from __future__ import annotations
 
 import struct
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from io import BytesIO
@@ -12,7 +15,7 @@ class DecodingBuffer:
     A buffer that allows automatic decoding of AMQP wire protocol objects.
     """
 
-    def __init__(self, payload_data: bytes):
+    def __init__(self, payload_data: bytes) -> None:
         """
         :param payload_data: The payload itself to decode.
         """
@@ -32,7 +35,7 @@ class DecodingBuffer:
 
         return self._offset < len(self._data)
 
-    def _unpack(self, fmt):
+    def _unpack(self, fmt: str) -> tuple[Any, ...]:
         fmt = "!" + fmt
         size = struct.calcsize(fmt)
         items = struct.unpack_from(fmt, self._data, self._offset)
@@ -134,45 +137,43 @@ class DecodingBuffer:
         type = chr(self.read_octet())
 
         if type == "t":
-            item = buf.read_octet() == 1
-        elif type == "b":
-            item = buf.read_octet_signed()
-        elif type == "B":
-            item = buf.read_octet()
-        elif type == "U":
-            item = buf.read_short_signed()
-        elif type == "u":
-            item = buf.read_short()
-        elif type == "I":
-            item = buf.read_long_signed()
-        elif type == "i":
-            item = buf.read_long()
-        elif type == "L":
-            item = buf.read_longlong_signed()
-        elif type == "l":
-            # item = buf.read_longlong()  # see errata
-            item = buf.read_longlong_signed()
-        elif type == "f" or type == "d":
-            item = buf._unpack(type)
-        elif type == "D":
+            return buf.read_octet() == 1
+        if type == "b":
+            return buf.read_octet_signed()
+        if type == "B":
+            return buf.read_octet()
+        if type == "U":
+            return buf.read_short_signed()
+        if type == "u":
+            return buf.read_short()
+        if type == "I":
+            return buf.read_long_signed()
+        if type == "i":
+            return buf.read_long()
+        if type == "L":
+            return buf.read_longlong_signed()
+        if type == "l":
+            # return buf.read_longlong()  # see errata
+            return buf.read_longlong_signed()
+        if type == "f" or type == "d":
+            return buf._unpack(type)
+        if type == "D":
             raise ValueError("Fuck you")
-        elif type == "s":
-            # item = buf.read_short_string()  # see errata
-            item = buf.read_short_signed()
-        elif type == "S" or type == "x":
-            item = buf.read_long_string()
-        elif type == "A":
-            item = self.read_array()
-        elif type == "T":
-            item = self.read_longlong()
-        elif type == "F":
-            item = self.read_table()
-        elif type == "V":
-            item = None
-        else:
-            raise ValueError(f"Unknown type code {type}")
+        if type == "s":
+            # return buf.read_short_string()  # see errata
+            return buf.read_short_signed()
+        if type == "S" or type == "x":
+            return buf.read_long_string()
+        if type == "A":
+            return self.read_array()
+        if type == "T":
+            return self.read_longlong()
+        if type == "F":
+            return self.read_table()
+        if type == "V":
+            return None
 
-        return item
+        raise ValueError(f"Unknown type code {type}")
 
     def read_array(self) -> list[Any]:
         """
@@ -222,14 +223,14 @@ class EncodingBuffer:
     A buffer that writes data in AMQP format.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._table_mode = False
         self._data = BytesIO()
 
         self._last_bit_data = 0
         self._last_bit_offset = 0
 
-    def _write(self, data: bytes):
+    def _write(self, data: bytes) -> None:
         if self._last_bit_offset > 0:
             self._data.write(self._last_bit_data.to_bytes(length=1, byteorder="big"))
             self._last_bit_data = 0
@@ -250,7 +251,7 @@ class EncodingBuffer:
 
         return data
 
-    def write_long_string(self, data: bytes):
+    def write_long_string(self, data: bytes) -> None:
         """
         Writes a long string to the buffer.
         """
@@ -262,13 +263,13 @@ class EncodingBuffer:
         self._write(size)
         self._write(data)
 
-    def _write_string(self, data: str):
+    def _write_string(self, data: str) -> None:
         encoded = data.encode("utf-8")
         size = struct.pack(">B", len(encoded))
         self._write(size)
         self._write(encoded)
 
-    def write_short_string(self, data: str):
+    def write_short_string(self, data: str) -> None:
         """
         Writes a short string to the buffer.
         """
@@ -278,7 +279,7 @@ class EncodingBuffer:
 
         self._write_string(data)
 
-    def write_octet(self, value: int):
+    def write_octet(self, value: int) -> None:
         """
         Writes a single byte to the buffer.
         """
@@ -288,7 +289,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">B", value))
 
-    def write_octet_signed(self, value: int):
+    def write_octet_signed(self, value: int) -> None:
         """
         Writes a single signed byte to the buffer.
         """
@@ -298,7 +299,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">b", value))
 
-    def write_short(self, value: int):
+    def write_short(self, value: int) -> None:
         """
         Writes a single short to the buffer.
         """
@@ -308,7 +309,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">H", value))
 
-    def write_short_signed(self, value: int):
+    def write_short_signed(self, value: int) -> None:
         """
         Writes a single signed short to the buffer.
         """
@@ -318,7 +319,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">h", value))
 
-    def write_long(self, value: int):
+    def write_long(self, value: int) -> None:
         """
         Writes a single long to the buffer.
         """
@@ -328,7 +329,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">I", value))
 
-    def write_long_signed(self, value: int):
+    def write_long_signed(self, value: int) -> None:
         """
         Writes a single signed long to the buffer.
         """
@@ -338,7 +339,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">i", value))
 
-    def write_longlong(self, value: int):
+    def write_longlong(self, value: int) -> None:
         """
         Writes a single long long to the buffer.
         """
@@ -348,7 +349,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">Q", value))
 
-    def write_longlong_signed(self, value: int):
+    def write_longlong_signed(self, value: int) -> None:
         """
         Writes a single signed long long to the buffer.
         """
@@ -359,10 +360,10 @@ class EncodingBuffer:
         self._write(struct.pack(">q", value))
 
     @overload
-    def write_timestamp(self, value: datetime): ...
+    def write_timestamp(self, value: datetime) -> None: ...
 
     @overload
-    def write_timestamp(self, value: int): ...
+    def write_timestamp(self, value: int) -> None: ...
 
     def write_timestamp(self, value: datetime | int) -> None:
         """
@@ -378,7 +379,7 @@ class EncodingBuffer:
         # time_t, long
         self._write(struct.pack(">L", value))
 
-    def write_float(self, value: float):
+    def write_float(self, value: float) -> None:
         """
         Writes a single precision float to the buffer.
         """
@@ -388,7 +389,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">f", value))
 
-    def write_double(self, value: float):
+    def write_double(self, value: float) -> None:
         """
         Writes a double precision float to the buffer.
         """
@@ -398,7 +399,7 @@ class EncodingBuffer:
 
         self._write(struct.pack(">d", value))
 
-    def write_bit(self, value: bool):
+    def write_bit(self, value: bool) -> None:
         """
         Writes a single bit to the buffer.
         """
@@ -413,7 +414,7 @@ class EncodingBuffer:
                 self._last_bit_data = (self._last_bit_data << 1) | value
                 self._last_bit_offset += 1
 
-    def force_write_bits(self):
+    def force_write_bits(self) -> None:
         """
         Forces a trailing bit write if needed.
         """
@@ -421,7 +422,7 @@ class EncodingBuffer:
         self._write(b"")
 
     @contextmanager
-    def _table_cm(self):
+    def _table_cm(self) -> Generator[TableWriter, Any, None]:
         buf = TableWriter()
         yield buf
 
@@ -443,7 +444,7 @@ class EncodingBuffer:
 
         return self._table_cm()
 
-    def write_table(self, table: dict[str, Any]):
+    def write_table(self, table: dict[str, Any]) -> None:
         """
         Writes a complete table.
         """
@@ -458,19 +459,19 @@ class TableWriter(EncodingBuffer):
     A subclass of the encoding buffer that has extensions for table methods.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         self._table_mode = True
 
-    def write_key(self, key: str):
+    def write_key(self, key: str) -> None:
         """
         Writes a standalone key to the buffer. This ignores table mode.
         """
 
         self._write_string(key)
 
-    def automatically_write_value(self, key: str, value: Any):
+    def automatically_write_value(self, key: str, value: Any) -> None:
         """
         Automatically writes a value. This will detect the type of the value and write the
         appropriate type. This is primarily useful for writing table data.

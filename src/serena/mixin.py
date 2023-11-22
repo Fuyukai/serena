@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 from collections.abc import AsyncIterable
 from contextlib import AbstractAsyncContextManager
@@ -241,7 +243,7 @@ class ChannelLike(abc.ABC):
         header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
-    ):
+    ) -> None:
         """
         Publishes a message to a specific exchange.
 
@@ -399,7 +401,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
         header: BasicHeader | None = None,
         mandatory: bool = True,
         immediate: bool = False,
-    ):
+    ) -> None:
         return await self._delegate.basic_publish(
             exchange_name=exchange_name,
             routing_key=routing_key,
@@ -423,7 +425,7 @@ class DefinitelyChannelDelegate(ChannelDelegate):
 
         super().__init__(channel)
 
-    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False):
+    async def basic_ack(self, delivery_tag: int, *, multiple: bool = False) -> None:
         """
         Acknowledges AMQP messages.
 
@@ -434,7 +436,7 @@ class DefinitelyChannelDelegate(ChannelDelegate):
 
         return await self._delegate.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
 
-    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True):
+    async def basic_reject(self, delivery_tag: int, *, requeue: bool = True) -> None:
         """
         Rejects an AMQP message.
 
@@ -454,7 +456,7 @@ class DefinitelyChannelDelegate(ChannelDelegate):
         *,
         multiple: bool = False,
         requeue: bool = False,
-    ):
+    ) -> None:
         """
         Rejects an AMQP message. This is a RabbitMQ-specific extension.
 
