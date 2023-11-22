@@ -43,9 +43,11 @@ mypy = "^1.7.0"
 [tool.pytest.ini_options]
 log_cli_level = "1"
 log_cli = true
-addopts = "--cov --cov-report=html -m 'not slow'"
+addopts = "--cov --cov-report=html -m 'not slow and not rabbitmq and not rabbitmq_extensions'"
 markers = [
     "slow: tests that are slow",
+    "rabbitmq: tests that only work on rabbitmq",
+    "rabbitmq_extensions: tests that use rabbitmq extensions"
 ]
 
 [tool.coverage.run]

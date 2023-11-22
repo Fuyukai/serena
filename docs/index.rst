@@ -19,7 +19,7 @@ Serena is a structurally concurrent AMQP 0-9-1 client library, for usage with th
 Requirements
 ------------
 
-1. Serena requires at least Python 3.8.
+1. Serena requires at least Python 3.11.
 
 2. Serena is primarily tested against RabbitMQ, but any broker that supports the `errata`_ version
    of AMQP is supported.

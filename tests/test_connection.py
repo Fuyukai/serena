@@ -54,6 +54,7 @@ async def test_bad_authentication():
     assert e.value.reply_code == ReplyCode.access_refused
 
 
+@pytest.mark.rabbitmq
 async def test_server_side_close():
     """
     Tests a server-side close.

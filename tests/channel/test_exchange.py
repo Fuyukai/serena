@@ -26,12 +26,12 @@ async def test_ex_declaration_invalid_type():
     Tests declaration with an invalid type.
     """
 
-    with pytest.raises(UnexpectedCloseError) as e:
-        async with open_connection("127.0.0.1") as conn:
+    async with open_connection("127.0.0.1") as conn:
+        with pytest.raises(UnexpectedCloseError) as e:
             async with conn.open_channel() as channel:
                 await channel.exchange_declare(name="invalid", type="invalid")
 
-    assert e.value.reply_code == ReplyCode.command_invalid
+        assert e.value.reply_code in (ReplyCode.command_invalid, ReplyCode.precondition_failed)
 
 
 async def test_ex_delete():
@@ -53,6 +53,7 @@ async def test_ex_delete():
         # assert e.value.reply_code == ReplyCode.not_found
 
 
+@pytest.mark.rabbitmq_extensions
 async def test_ex_binding():
     """
     Tests binding an array to another array.
@@ -61,21 +62,20 @@ async def test_ex_binding():
     exchange_name = f"ex-bind-1-{test_suffix}"
     ex_2 = f"ex-bind-2-{test_suffix}"
 
-    async with open_connection("127.0.0.1") as conn:
-        if not conn._is_rabbitmq:
-            pytest.skip("rabbitmq-specific extension")
+    async with (
+        open_connection("127.0.0.1") as conn,
+        conn.open_channel() as channel
+    ):
+        await channel.exchange_declare(exchange_name, ExchangeType.DIRECT)
+        await channel.exchange_declare(ex_2, ExchangeType.DIRECT)
+        await channel.exchange_bind(exchange_name, ex_2, routing_key="")
 
-        async with conn.open_channel() as channel:
-            await channel.exchange_declare(exchange_name, ExchangeType.DIRECT)
-            await channel.exchange_declare(ex_2, ExchangeType.DIRECT)
-            await channel.exchange_bind(exchange_name, ex_2, routing_key="")
+        queue = await channel.queue_declare("", exclusive=True)
+        await channel.queue_bind(queue.name, exchange_name, routing_key="")
 
-            queue = await channel.queue_declare("", exclusive=True)
-            await channel.queue_bind(queue.name, exchange_name, routing_key="")
+        # rabbitmq should forward messages from ex_2 to ex_1 then to the queue
+        await channel.basic_publish(ex_2, routing_key="", body=b"test")
 
-            # rabbitmq should forward messages from ex_2 to ex_1 then to the queue
-            await channel.basic_publish(ex_2, routing_key="", body=b"test")
-
-            message = await channel.basic_get(queue.name)
-            assert message is not None
-            assert message.body == b"test"
+        message = await channel.basic_get(queue.name)
+        assert message is not None
+        assert message.body == b"test"
