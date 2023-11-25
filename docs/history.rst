@@ -3,6 +3,12 @@
 Version History
 ===============
 
+0.8.1 (2023-11-25)
+------------------
+
+- Properly re-export names in ``__init__.py``.
+- Remove the hacky ``logger.trace``. This also achieves 100% type completion.
+
 0.8.0 (2023-11-22)
 ------------------
 

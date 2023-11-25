@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from functools import partial
@@ -11,6 +10,8 @@ from typing import (
     TypeVar,
     cast,
 )
+
+from serena.utils import LoggerWithTrace
 
 try:
     from typing import override
@@ -75,7 +76,7 @@ from serena.payloads.method import (
 if TYPE_CHECKING:
     from serena.connection import AMQPConnection
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger: LoggerWithTrace = LoggerWithTrace.get(__name__)
 
 PayloadType = TypeVar("PayloadType", bound=MethodPayload)
 
@@ -813,9 +814,7 @@ class Channel(ChannelLike):
                         f"Expected Ack for delivery tag {self._message_counter}, "
                         f"but got Ack for delivery tag {payload.delivery_tag}"
                     )
-                logger.trace(  # type: ignore
-                    f"C#{self.id}: Server ACKed published message"
-                )
+                logger.trace(f"C#{self.id}: Server ACKed published message")
 
             elif isinstance(payload, BasicReturnPayload):
                 raise MessageReturnedError(

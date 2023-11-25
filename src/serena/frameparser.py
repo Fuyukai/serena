@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import struct
 from math import ceil
 
@@ -19,6 +18,7 @@ from serena.payloads.method import (
     method_payload_name,
     serialise_payload,
 )
+from serena.utils import LoggerWithTrace
 
 
 class _NEED_DATA:
@@ -28,7 +28,7 @@ class _NEED_DATA:
 #: A special singleton object used if the parser needs more data.
 NEED_DATA = _NEED_DATA()
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger: LoggerWithTrace = LoggerWithTrace.get(__name__)
 
 # Dear RabbitMQ authors:
 # Fuck you. I fucking HATE you. Implement the FUCKING SPEC PROPERLY.
@@ -68,7 +68,7 @@ class FrameParser:
         if type == METHOD_FRAME:
             method_payload = deserialise_payload(payload)
             frame = MethodFrame(channel_id=channel, payload=method_payload)
-            logger.trace(  # type: ignore
+            logger.trace(
                 f"S#{channel}->C FRAME (METHOD): {method_payload_name(method_payload)} "
                 f"({len(payload)}B)"
             )
@@ -76,23 +76,19 @@ class FrameParser:
 
         if type == HEADER_FRAME:
             content_header = deserialise_basic_header(payload)
-            logger.trace(  # type: ignore
+            logger.trace(
                 f"S#{channel}->C FRAME (HEADER): {content_header.class_id.name} ("
                 f"{len(payload)} bytes)"
             )
             return ContentHeaderFrame(channel_id=channel, payload=content_header)
 
         if type == BODY_FRAME:
-            logger.trace(  # type: ignore
-                f"S#{channel}->C FRAME (BODY): {len(payload)} bytes"
-            )
+            logger.trace(f"S#{channel}->C FRAME (BODY): {len(payload)} bytes")
             return BodyFrame(channel_id=channel, data=payload)
 
         if type == HEARTBEAT_FRAME:
             assert channel == 0, "heartbeats cannot be on any channel other than zero"
-            logger.trace(  # type: ignore
-                "S->C FRAME (HEARTBEAT)"
-            )
+            logger.trace("S->C FRAME (HEARTBEAT)")
             return HeartbeatFrame(channel_id=0)
 
         raise ValueError(f"Invalid frame type: {type}")
@@ -124,7 +120,7 @@ class FrameParser:
 
         body = serialise_payload(payload)
         result = FrameParser._pack_frame(METHOD_FRAME, channel, body)
-        logger.trace(  # type: ignore
+        logger.trace(
             f"C#{channel}->S FRAME (METHOD): {method_payload_name(payload)} ({len(body)} bytes)"
         )
         return result
@@ -139,7 +135,7 @@ class FrameParser:
 
         frame_body = serialise_basic_header(method_klass, body_length, headers)
         result = FrameParser._pack_frame(HEADER_FRAME, channel, frame_body)
-        logger.trace(  # type: ignore
+        logger.trace(
             f"C#{channel}->S FRAME (HEADER): {method_klass.name} ({len(frame_body)} bytes)"
         )
         return result
@@ -159,7 +155,7 @@ class FrameParser:
         for i in range(0, frames_needed):
             frame_body = body[max_frame_size * i : max_frame_size * (i + 1)]
             frame = FrameParser._pack_frame(BODY_FRAME, channel, frame_body)
-            logger.trace(  # type: ignore
+            logger.trace(
                 f"C#{channel}->S FRAME (BODY): {i + 1} / {frames_needed} ({len(frame_body)} bytes)"
             )
             frames.append(frame)
@@ -190,7 +186,7 @@ class FrameParser:
             self._bytes_remaining -= len(body)
 
             if self._bytes_remaining > 0:
-                logger.trace(  # type: ignore
+                logger.trace(
                     f"Still missing {self._bytes_remaining} bytes from packet, skipping cycle"
                 )
                 return NEED_DATA
@@ -210,9 +206,7 @@ class FrameParser:
         else:  # noqa
             # header is 7 octets, without it we don't care.
             if len(self._buffer) < 7:  # pragma: no cover
-                logger.trace(  # type: ignore
-                    "Missing packet header, skipping"
-                )
+                logger.trace("Missing packet header, skipping")
                 return NEED_DATA
 
             # pop off bits
@@ -225,9 +219,7 @@ class FrameParser:
                 | self._buffer[6]
             ) + 1  # + 1 is for the frame end byte (0xCE)
 
-            logger.trace(  # type: ignore
-                f"Received packet ({type_=} | {channel=} | {size=})"
-            )
+            logger.trace(f"Received packet ({type_=} | {channel=} | {size=})")
 
             body, self._buffer = self._buffer[7 : size + 7], self._buffer[size + 7 :]
 
@@ -239,9 +231,7 @@ class FrameParser:
                 self._saved_type = type_
                 self._last_packet_buffer = body
                 self._bytes_remaining = size - len(body)
-                logger.trace(  # type: ignore
-                    f"Missing {self._bytes_remaining} bytes from packet, skipping cycle"
-                )
+                logger.trace(f"Missing {self._bytes_remaining} bytes from packet, skipping cycle")
                 return NEED_DATA
             else:  # noqa
                 assert body[-1] == 0xCE, "invalid frame-end octet"

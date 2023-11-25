@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import enum
 import importlib.metadata
-import logging
 import os
 import sys
 import time
@@ -57,9 +56,10 @@ from serena.payloads.method import (
     method_payload_name,
 )
 from serena.pool import ChannelPool
+from serena.utils import LoggerWithTrace
 from serena.utils.bitset import BitSet
 
-logger = logging.getLogger(__name__)
+logger: LoggerWithTrace = LoggerWithTrace.get(__name__)
 
 
 class AMQPState(enum.IntEnum):
@@ -336,9 +336,7 @@ class AMQPConnection:
                 self._server_capabilities = caps
                 for cap, value in self._server_capabilities.items():
                     if value:
-                        logger.trace(  # type: ignore
-                            f"Server supports capability {cap}"
-                        )
+                        logger.trace(f"Server supports capability {cap}")
 
                 if "PLAIN" not in mechanisms:  # pragma: no cover
                     # we only speak plain (for now...)

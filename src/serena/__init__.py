@@ -1,30 +1,19 @@
 import logging
 
 # our public exports, relatively minimal
-from serena.channel import Channel
-from serena.connection import AMQPConnection, open_connection
-from serena.enums import ClassID, ExchangeType, ReplyCode
+from serena.channel import Channel as Channel
+from serena.connection import AMQPConnection as AMQPConnection, open_connection as open_connection
+from serena.enums import ClassID as ClassID, ExchangeType as ExchangeType, ReplyCode as ReplyCode
 from serena.exc import (
-    AMQPError,
-    AMQPStateError,
-    InvalidPayloadTypeError,
-    InvalidProtocolError,
-    MessageReturnedError,
-    UnexpectedCloseError,
+    AMQPError as AMQPError,
+    AMQPStateError as AMQPStateError,
+    InvalidPayloadTypeError as InvalidPayloadTypeError,
+    InvalidProtocolError as InvalidProtocolError,
+    MessageReturnedError as MessageReturnedError,
+    UnexpectedCloseError as UnexpectedCloseError,
 )
-from serena.message import AMQPMessage
-from serena.mixin import ChannelDelegate, ChannelLike
-from serena.payloads.header import BasicHeader
+from serena.message import AMQPMessage as AMQPMessage
+from serena.mixin import ChannelDelegate as ChannelDelegate, ChannelLike as ChannelLike
+from serena.payloads.header import BasicHeader as BasicHeader
 
-if not hasattr(logging.Logger, "trace"):
-    # TRACE_LEVEL = 5
-    logging.addLevelName(5, "TRACE")
-
-    def trace(self, message, *args, **kws) -> None:  # type: ignore
-        if self.isEnabledFor(5):
-            self._log(5, message, args, **kws)
-
-    logging.Logger.trace = trace  # type: ignore
-    del trace
-
-del logging
+logging.addLevelName(5, "TRACE")
