@@ -5,7 +5,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "serena"
-version = "0.8.1"
+version = "0.8.2"
 description = "An AMQP 0-9-1 client using AnyIO."
 authors = ["Lura Skye <l@veriny.tf>"]
 license = "LGPL-3.0-or-later"
