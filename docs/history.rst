@@ -3,6 +3,16 @@
 Version History
 ===============
 
+0.9.0 (2024-01-25)
+==================
+
+- Fix all Pyright strict mode errors.
+- Change channel objects to use regular dicts instead of ``**kwargs`` for connection-specific
+  arguments.
+
+  Some implementations (i.e. RabbitMQ) uses extensions in the format ``X-Argument``, which obviously
+  isn't supported by Python.
+
 0.8.1 (2023-11-25)
 ------------------
 
