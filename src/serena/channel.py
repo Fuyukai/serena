@@ -11,19 +11,13 @@ from typing import (
     cast,
 )
 
-from serena.utils import LoggerWithTrace
-
-try:
-    from typing import override
-except ImportError:
-    from typing_extensions import override
-
 import anyio
 import outcome
 from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
 from anyio.abc import TaskStatus
 from anyio.lowlevel import checkpoint
 from outcome import Error, Value
+from typing_extensions import override
 
 from serena.enums import ExchangeType
 from serena.exc import (
@@ -72,6 +66,7 @@ from serena.payloads.method import (
     QueueUnbindOkPayload,
     QueueUnbindPayload,
 )
+from serena.utils import LoggerWithTrace
 
 if TYPE_CHECKING:
     from serena.connection import AMQPConnection
@@ -124,6 +119,7 @@ class Channel(ChannelLike):
         # used to count acks
         self._message_counter = 0
 
+    @override
     def __str__(self) -> str:
         return f"<Channel id={self.id} buffered={self.current_buffer_size}>"
 
@@ -175,7 +171,9 @@ class Channel(ChannelLike):
         Closes this channel.
         """
 
-        self._close_info = payload
+        if self._close_info is None:
+            self._close_info = payload
+
         self._send.close()
         self._delivery_send.close()
         self._closed = True
@@ -205,7 +203,7 @@ class Channel(ChannelLike):
         frames.
         """
 
-        method = None
+        method: MethodFrame[MethodPayload] | None = None
         headers = None
         body = b""
 
@@ -235,15 +233,18 @@ class Channel(ChannelLike):
                 if not isinstance(next_frame, MethodFrame):
                     raise AMQPStateError(f"Expected a method frame, got {next_frame} instead")
 
-                if isinstance(next_frame.payload, BasicGetOkPayload | BasicDeliverPayload):
-                    method = next_frame
+                method_frame: MethodFrame[MethodPayload] = next_frame
 
-                elif isinstance(next_frame.payload, BasicGetEmptyPayload):
+                if isinstance(method_frame.payload, BasicGetOkPayload | BasicDeliverPayload):
+                    method = method_frame
+
+                elif isinstance(method_frame.payload, BasicGetEmptyPayload):
                     return None
 
                 else:
                     raise AMQPStateError(
-                        f"Expected Basic.Deliver or Basic.Get-Ok, got {next_frame.payload} instead"
+                        "Expected Basic.Deliver or Basic.Get-Ok, "
+                        f"got {method_frame.payload} instead"
                     )
 
             elif headers is None:
@@ -290,7 +291,7 @@ class Channel(ChannelLike):
         """
 
         frame = await self._receive.receive()
-        if not isinstance(frame, MethodFrame):
+        if not isinstance(frame, MethodFrame):  # type: ignore
             raise AMQPStateError(f"Expected MethodFrame, got {frame}")
 
         if not isinstance(frame.payload, ChannelOpenOkPayload):
@@ -875,6 +876,7 @@ class Channel(ChannelLike):
         payload = BasicNackPayload(delivery_tag, multiple, requeue)
         await self._send_single_frame(payload)
 
+    @override
     async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         """
         Gets a single message from a queue.

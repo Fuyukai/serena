@@ -120,7 +120,7 @@ def deserialise_basic_header(payload: bytes) -> ContentHeaderPayload:
             data = decode_attrs_attribute(buffer, field)
             params[field.name] = data
 
-    header = BasicHeader(**params)
+    header = BasicHeader(**params)  # type: ignore
     return ContentHeaderPayload(class_id=klass, full_size=body_size, flags=flags, payload=header)
 
 

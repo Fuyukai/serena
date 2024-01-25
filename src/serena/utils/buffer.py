@@ -191,7 +191,7 @@ class DecodingBuffer:
         table = self.read_long_string()
         buf = DecodingBuffer(table)
 
-        result = {}
+        result: dict[str, Any] = {}
 
         while buf.has_data:
             key = buf.read_short_string()
@@ -360,12 +360,10 @@ class EncodingBuffer:
         self._write(struct.pack(">q", value))
 
     @overload
-    def write_timestamp(self, value: datetime) -> None:
-        ...
+    def write_timestamp(self, value: datetime) -> None: ...
 
     @overload
-    def write_timestamp(self, value: int) -> None:
-        ...
+    def write_timestamp(self, value: int) -> None: ...
 
     def write_timestamp(self, value: datetime | int) -> None:
         """
@@ -508,7 +506,7 @@ class TableWriter(EncodingBuffer):
             self.write_timestamp(value)
 
         elif isinstance(value, dict):
-            self.write_table(value)
+            self.write_table(value)  # type: ignore
 
         else:
             raise ValueError(f"Unknown item: {value} ({type(value)})")

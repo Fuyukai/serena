@@ -5,15 +5,12 @@ from collections.abc import AsyncIterable
 from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import override
+
 from serena.enums import ExchangeType
 from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import QueueDeclareOkPayload
-
-try:
-    from typing import override
-except ImportError:
-    from typing_extensions import override
 
 if TYPE_CHECKING:
     from serena.channel import Channel
@@ -323,18 +320,26 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
 
     @override
     async def exchange_bind(
-        self, destination: str, source: str, routing_key: str, **arguments: Any
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         return await self._delegate.exchange_bind(
-            destination=destination, source=source, routing_key=routing_key, **arguments
+            destination=destination, source=source, routing_key=routing_key, arguments=arguments
         )
 
     @override
     async def exchange_unbind(
-        self, destination: str, source: str, routing_key: str, **arguments: Any
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         return await self._delegate.exchange_unbind(
-            destination=destination, source=source, routing_key=routing_key, **arguments
+            destination=destination, source=source, routing_key=routing_key, arguments=arguments
         )
 
     @override
@@ -386,10 +391,17 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
 
     @override
     async def queue_unbind(
-        self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
+        self,
+        queue_name: str,
+        exchange_name: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         return await self._delegate.queue_unbind(
-            queue_name=queue_name, exchange_name=exchange_name, routing_key=routing_key, **arguments
+            queue_name=queue_name,
+            exchange_name=exchange_name,
+            routing_key=routing_key,
+            arguments=arguments,
         )
 
     @override
@@ -445,7 +457,7 @@ class DefinitelyChannelDelegate(ChannelDelegate):
     """
 
     def __init__(self, channel: Channel) -> None:
-        self._delegate: Channel
+        self._delegate: Channel  # type: ignore
 
         super().__init__(channel)
 

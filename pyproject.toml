@@ -36,8 +36,9 @@ sphinx-autodoc-typehints = ">=1.23.0"
 pytest = ">=7.4.3"
 trio = ">=0.22.0"
 pytest-cov = ">=4.1.0"
-ruff = ">=0.1.6"
+ruff = ">=0.1.14"
 mypy = ">=1.7.0"
+pyright = ">=1.1.348"
 
 
 [tool.pytest.ini_options]
@@ -91,7 +92,7 @@ select = [
   "PERF",
 ]
 ignore = [
-    "W291",  # SHUT THE FUCK UP WHEN I'M TYPING COMMENTS
+    "W291",
     "W293",
     "E266"
 ]
@@ -103,8 +104,17 @@ combine-as-imports = true
 # why the fuck is this not the default?
 "__init__.py" = ["E402", "F401"]
 
+[tool.pyright]
+pythonVersion = "3.11"
+include = ["src"]
+typeCheckingMode = "strict"
+
+reportImplicitOverride = "warning"
+reportUnusedVariable = false
+reportPrivateUsage = false
+
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 ignore_missing_imports = true
 
 local_partial_types = true

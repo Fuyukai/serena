@@ -10,6 +10,7 @@ from typing import (
 
 import anyio
 from anyio import Event, WouldBlock
+from typing_extensions import override
 
 from serena.channel import Channel
 from serena.enums import ExchangeType
@@ -125,6 +126,7 @@ class ChannelPool(ChannelLike):
             self._return_channel(channel)
 
     @asynccontextmanager
+    @override
     async def basic_consume(
         self,
         queue_name: str,
@@ -134,7 +136,7 @@ class ChannelPool(ChannelLike):
         no_ack: bool = False,
         exclusive: bool = False,
         auto_ack: bool = True,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> AsyncGenerator[AsyncIterable[AMQPMessage], None]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
@@ -155,17 +157,21 @@ class ChannelPool(ChannelLike):
                          Serena-exclusive feature, not a protocol feature.
         """
 
-        async with self._checkout() as channel, channel.basic_consume(
-            queue_name=queue_name,
-            consumer_tag=consumer_tag,
-            no_local=no_local,
-            no_ack=no_ack,
-            exclusive=exclusive,
-            auto_ack=auto_ack,
-            **arguments,
-        ) as it:
+        async with (
+            self._checkout() as channel,
+            channel.basic_consume(
+                queue_name=queue_name,
+                consumer_tag=consumer_tag,
+                no_local=no_local,
+                no_ack=no_ack,
+                exclusive=exclusive,
+                auto_ack=auto_ack,
+                arguments=arguments,
+            ) as it,
+        ):
             yield it
 
+    @override
     async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         """
         Gets a single message from a queue.
@@ -182,6 +188,7 @@ class ChannelPool(ChannelLike):
                 no_ack=no_ack,
             )
 
+    @override
     async def basic_publish(
         self,
         exchange_name: str,
@@ -222,8 +229,13 @@ class ChannelPool(ChannelLike):
                 immediate=immediate,
             )
 
+    @override
     async def exchange_bind(
-        self, destination: str, source: str, routing_key: str, **arguments: Any
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Binds an exchange to another exchange. This is a
@@ -247,6 +259,7 @@ class ChannelPool(ChannelLike):
                 arguments=arguments,
             )
 
+    @override
     async def exchange_declare(
         self,
         name: str,
@@ -256,7 +269,7 @@ class ChannelPool(ChannelLike):
         durable: bool = False,
         auto_delete: bool = False,
         internal: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> str:
         """
         Declares a new exchange.
@@ -285,6 +298,7 @@ class ChannelPool(ChannelLike):
                 arguments=arguments,
             )
 
+    @override
     async def exchange_delete(self, name: str, *, if_unused: bool = False) -> None:
         """
         Deletes an exchange.
@@ -301,8 +315,13 @@ class ChannelPool(ChannelLike):
                 if_unused=if_unused,
             )
 
+    @override
     async def exchange_unbind(
-        self, destination: str, source: str, routing_key: str, **arguments: Any
+        self,
+        destination: str,
+        source: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Unbinds an exchange from another exchange. This is a
@@ -326,8 +345,13 @@ class ChannelPool(ChannelLike):
                 arguments=arguments,
             )
 
+    @override
     async def queue_bind(
-        self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
+        self,
+        queue_name: str,
+        exchange_name: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Binds a queue to an exchange.
@@ -347,6 +371,7 @@ class ChannelPool(ChannelLike):
                 arguments=arguments,
             )
 
+    @override
     async def queue_declare(
         self,
         name: str,
@@ -355,7 +380,7 @@ class ChannelPool(ChannelLike):
         durable: bool = False,
         exclusive: bool = False,
         auto_delete: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> QueueDeclareOkPayload:
         """
         Declares a queue.
@@ -385,6 +410,7 @@ class ChannelPool(ChannelLike):
                 arguments=arguments,
             )
 
+    @override
     async def queue_delete(
         self, queue_name: str, *, if_empty: bool = False, if_unused: bool = False
     ) -> int:
@@ -404,6 +430,7 @@ class ChannelPool(ChannelLike):
                 if_unused=if_unused,
             )
 
+    @override
     async def queue_purge(self, queue_name: str) -> int:
         """
         Purges all messages from a queue.
@@ -417,8 +444,13 @@ class ChannelPool(ChannelLike):
                 queue_name=queue_name,
             )
 
+    @override
     async def queue_unbind(
-        self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
+        self,
+        queue_name: str,
+        exchange_name: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Unbinds a queue from an exchange.

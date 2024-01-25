@@ -106,7 +106,7 @@ class FrameParser:
 
         size = len(payload)
         header = struct.pack(">BHI", type_, channel, size)
-        return header + payload + b"\xCE"
+        return header + payload + b"\xce"
 
     @staticmethod
     def write_method_frame(channel: int, payload: MethodPayload) -> bytes:
@@ -150,7 +150,7 @@ class FrameParser:
             return []
 
         frames_needed = ceil(len(body) / max_frame_size)
-        frames = []
+        frames: list[bytes] = []
 
         for i in range(0, frames_needed):
             frame_body = body[max_frame_size * i : max_frame_size * (i + 1)]
@@ -198,7 +198,7 @@ class FrameParser:
             # packet finished, construct frame from saved values
             self._processing_partial_packet = False
             frame = self._make_frame(
-                self._saved_type, self._saved_channel, self._last_packet_buffer
+                self._saved_type, self._saved_channel, bytes(self._last_packet_buffer)
             )
             self._last_packet_buffer = bytearray()
 
@@ -237,4 +237,4 @@ class FrameParser:
                 assert body[-1] == 0xCE, "invalid frame-end octet"
                 body = body[:-1]
 
-                return self._make_frame(type_, channel, body)
+                return self._make_frame(type_, channel, bytes(body))

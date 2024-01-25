@@ -83,7 +83,7 @@ class HeartbeatStatistics:
     heartbeat_count: int = attr.ib(default=0)
 
     #: The previous heartbeat time, in monotonic nanoseconds.
-    prev_heartbeat_mn: int = attr.ib(default=None)
+    prev_heartbeat_mn: int = attr.ib(default=-1)
 
     #: The current heartbeat time, in monotonic nanoseconds.
     cur_heartbeat_mn: int = attr.ib(default=None)
@@ -100,7 +100,7 @@ class HeartbeatStatistics:
         Returns the interval between two heartbeats in nanoseconds.
         """
 
-        if self.prev_heartbeat_mn is None:
+        if self.prev_heartbeat_mn == -1:
             return None
 
         return self.cur_heartbeat_mn - self.prev_heartbeat_mn
@@ -140,7 +140,7 @@ class AMQPConnection:
         self._parser = FrameParser()
         self._heartbeat_interval = heartbeat_interval
         self._channel_buffer_size = channel_buffer_size
-        self._cancel_scope: CancelScope = None  # type: ignore
+        self._cancel_scope: CancelScope | None = None
 
         self._closed = False
         self._server_requested_close = False
@@ -294,16 +294,17 @@ class AMQPConnection:
             incoming_frame = await self._read_single_frame()
             # this can *never* reasonably happen during the handshake
             assert isinstance(incoming_frame, MethodFrame), "incoming frame was not a method???"
+            method_frame: MethodFrame[MethodPayload] = incoming_frame
 
-            if isinstance(incoming_frame.payload, ConnectionClosePayload):
+            if isinstance(method_frame.payload, ConnectionClosePayload):
                 close_ok = ConnectionCloseOkPayload()
                 try:
                     await self._send_method_frame(0, close_ok)
                 finally:
-                    raise UnexpectedCloseError.of(incoming_frame.payload)
+                    raise UnexpectedCloseError.of(method_frame.payload)
 
             if state == AMQPState.INITIAL:
-                payload = incoming_frame.payload
+                payload = method_frame.payload
 
                 if not isinstance(payload, ConnectionStartPayload):  # pragma: no cover
                     await self._close_ungracefully()
@@ -359,7 +360,7 @@ class AMQPConnection:
                 state = AMQPState.RECEIVED_START
 
             elif state == AMQPState.RECEIVED_START:
-                payload = incoming_frame.payload
+                payload = method_frame.payload
                 if isinstance(payload, ConnectionTunePayload):
                     wanted_channel_size = min(payload.max_channels, 65535)
                     logger.debug(
@@ -399,7 +400,7 @@ class AMQPConnection:
                     raise InvalidPayloadTypeError(ConnectionTunePayload, payload)
 
             elif state == AMQPState.RECEIVED_TUNE:
-                payload = incoming_frame.payload
+                payload = method_frame.payload
                 if isinstance(payload, ConnectionOpenOkPayload):
                     # we are open
                     logger.info("AMQP connection is ready to go")
@@ -464,6 +465,7 @@ class AMQPConnection:
         frame = ChannelClosePayload(
             reply_code=ReplyCode.success, reply_text="Normal close", class_id=0, method_id=0
         )
+        self._channel_channels[id]._close_info = frame
         await self._send_method_frame(id, frame)
 
     async def _handle_control_frame(self, frame: MethodFrame[MethodPayload]) -> None:
@@ -539,7 +541,7 @@ class AMQPConnection:
 
         while True:
             # heartbeat frame
-            await self._send(b"\x08\x00\x00\x00\x00\x00\x00\xCE")
+            await self._send(b"\x08\x00\x00\x00\x00\x00\x00\xce")
             await sleep(self._heartbeat_interval / 2)
 
     async def _listen_for_messages(self) -> None:
@@ -572,27 +574,29 @@ class AMQPConnection:
 
             elif frame.type == FrameType.METHOD:
                 assert isinstance(frame, MethodFrame)
+                method_frame: MethodFrame[MethodPayload] = frame
 
                 # intercept control frames, e.g. close payloads
                 channel = frame.channel_id
                 if channel == 0:
-                    await self._handle_control_frame(frame)
+                    await self._handle_control_frame(method_frame)
                     continue
 
                 # we intercept certain control frames
                 # channelcloseok is handled here because channels can't deal with their own closure
                 # (as they don't know when they finish)
                 channel_object = self._channel_channels[channel]
-                payload = frame.payload
+                payload = method_frame.payload
 
                 if isinstance(payload, ChannelClosePayload | ChannelCloseOkPayload):
-                    is_unclean = isinstance(frame.payload, ChannelClosePayload)
+                    is_unclean = isinstance(payload, ChannelClosePayload)
                     logger.debug(f"Channel close received, {is_unclean=}")
+                    close_payload = payload if is_unclean else None
 
                     # ack the close
                     # todo: should his be here?
                     try:
-                        await self._remove_channel(channel, frame.payload)
+                        await self._remove_channel(channel, close_payload)
                     finally:
                         if is_unclean:
                             await self._send_method_frame(channel, ChannelCloseOkPayload())
@@ -600,19 +604,19 @@ class AMQPConnection:
                     continue
 
                 if isinstance(
-                    frame.payload, BasicDeliverPayload | BasicGetOkPayload | BasicGetEmptyPayload
+                    payload, BasicDeliverPayload | BasicGetOkPayload | BasicGetEmptyPayload
                 ):
                     # requires special logic
-                    await self._enqueue_frame(channel_object, frame)
+                    await self._enqueue_frame(channel_object, method_frame)
 
                 else:
                     # just delivery normally
                     try:
-                        channel_object._enqueue_regular(frame)
+                        channel_object._enqueue_regular(method_frame)
                     except WouldBlock:
                         logger.warning(
                             f"Channel #{channel} was not listening for frame "
-                            f"{method_payload_name(frame.payload)}, dropping"
+                            f"{method_payload_name(payload)}, dropping"
                         )
 
             elif frame.type == FrameType.HEADER or frame.type == FrameType.BODY:
@@ -677,11 +681,12 @@ class AMQPConnection:
                                 "Expected CloseOk, but connection failed to send it"
                             ) from None
 
-                        if isinstance(reply, MethodFrame) and isinstance(
-                            reply.payload, ConnectionCloseOkPayload
-                        ):
-                            logger.debug("Received CloseOk, closing connection")
-                            return
+                        if isinstance(reply, MethodFrame):
+                            method_frame: MethodFrame[MethodPayload] = reply
+
+                            if isinstance(method_frame.payload, ConnectionCloseOkPayload):
+                                logger.debug("Received CloseOk, closing connection")
+                                return
                 finally:
                     await self._close_ungracefully()
 
@@ -745,7 +750,7 @@ class AMQPConnection:
         """
 
         # close any background tasks
-        if not self._cancel_scope.cancel_called:
+        if self._cancel_scope is not None and not self._cancel_scope.cancel_called:
             # noinspection PyAsyncCall
             self._cancel_scope.cancel()
 

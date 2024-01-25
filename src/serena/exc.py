@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Self
+from typing_extensions import override
 
 from serena.enums import ReplyCode
 from serena.payloads.method import (
@@ -62,6 +63,7 @@ class MessageReturnedError(AMQPError):
         #: The routing key the message was using.
         self.routing_key = routing_key
 
+    @override
     def __str__(self) -> str:
         return (
             f"Message with routing key '{self.routing_key}' was returned from '{self.exchange}': "
