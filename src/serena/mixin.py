@@ -10,6 +10,11 @@ from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader
 from serena.payloads.method import QueueDeclareOkPayload
 
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
+
 if TYPE_CHECKING:
     from serena.channel import Channel
 
@@ -29,7 +34,7 @@ class ChannelLike(abc.ABC):
         durable: bool = False,
         auto_delete: bool = False,
         internal: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> str:
         """
         Declares a new exchange.
@@ -69,7 +74,7 @@ class ChannelLike(abc.ABC):
         destination: str,
         source: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Binds an exchange to another exchange. This is a
@@ -91,7 +96,7 @@ class ChannelLike(abc.ABC):
         destination: str,
         source: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Unbinds an exchange from another exchange. This is a
@@ -116,7 +121,7 @@ class ChannelLike(abc.ABC):
         durable: bool = False,
         exclusive: bool = False,
         auto_delete: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> QueueDeclareOkPayload:
         """
         Declares a queue.
@@ -143,7 +148,7 @@ class ChannelLike(abc.ABC):
         queue_name: str,
         exchange_name: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Binds a queue to an exchange.
@@ -190,7 +195,7 @@ class ChannelLike(abc.ABC):
         queue_name: str,
         exchange_name: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Unbinds a queue from an exchange.
@@ -211,7 +216,7 @@ class ChannelLike(abc.ABC):
         no_ack: bool = False,
         exclusive: bool = False,
         auto_ack: bool = True,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[AsyncIterable[AMQPMessage]]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous
@@ -290,6 +295,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
 
         self._delegate: ChannelLike = channel
 
+    @override
     async def exchange_declare(
         self,
         name: str,
@@ -299,7 +305,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
         durable: bool = False,
         auto_delete: bool = False,
         internal: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> str:
         return await self._delegate.exchange_declare(
             name=name,
@@ -308,12 +314,14 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             durable=durable,
             auto_delete=auto_delete,
             internal=internal,
-            **arguments,
+            arguments=arguments,
         )
 
+    @override
     async def exchange_delete(self, name: str, *, if_unused: bool = False) -> None:
         return await self._delegate.exchange_delete(name, if_unused=if_unused)
 
+    @override
     async def exchange_bind(
         self, destination: str, source: str, routing_key: str, **arguments: Any
     ) -> None:
@@ -321,6 +329,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             destination=destination, source=source, routing_key=routing_key, **arguments
         )
 
+    @override
     async def exchange_unbind(
         self, destination: str, source: str, routing_key: str, **arguments: Any
     ) -> None:
@@ -328,6 +337,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             destination=destination, source=source, routing_key=routing_key, **arguments
         )
 
+    @override
     async def queue_declare(
         self,
         name: str = "",
@@ -336,7 +346,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
         durable: bool = False,
         exclusive: bool = False,
         auto_delete: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> QueueDeclareOkPayload:
         return await self._delegate.queue_declare(
             name=name,
@@ -344,16 +354,25 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             durable=durable,
             exclusive=exclusive,
             auto_delete=auto_delete,
-            **arguments,
+            arguments=arguments,
         )
 
+    @override
     async def queue_bind(
-        self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
+        self,
+        queue_name: str,
+        exchange_name: str,
+        routing_key: str,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         return await self._delegate.queue_bind(
-            queue_name=queue_name, exchange_name=exchange_name, routing_key=routing_key, **arguments
+            queue_name=queue_name,
+            exchange_name=exchange_name,
+            routing_key=routing_key,
+            arguments=arguments,
         )
 
+    @override
     async def queue_delete(
         self, queue_name: str, *, if_empty: bool = False, if_unused: bool = False
     ) -> int:
@@ -361,9 +380,11 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             queue_name=queue_name, if_empty=if_empty, if_unused=if_unused
         )
 
+    @override
     async def queue_purge(self, queue_name: str) -> int:
         return await self._delegate.queue_purge(queue_name=queue_name)
 
+    @override
     async def queue_unbind(
         self, queue_name: str, exchange_name: str, routing_key: str, **arguments: Any
     ) -> None:
@@ -371,6 +392,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             queue_name=queue_name, exchange_name=exchange_name, routing_key=routing_key, **arguments
         )
 
+    @override
     def basic_consume(
         self,
         queue_name: str,
@@ -380,7 +402,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
         no_ack: bool = False,
         exclusive: bool = False,
         auto_ack: bool = True,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[AsyncIterable[AMQPMessage]]:
         return self._delegate.basic_consume(
             queue_name=queue_name,
@@ -389,9 +411,10 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             no_ack=no_ack,
             exclusive=exclusive,
             auto_ack=auto_ack,
-            **arguments,
+            arguments=arguments,
         )
 
+    @override
     async def basic_publish(
         self,
         exchange_name: str,
@@ -411,6 +434,7 @@ class ChannelDelegate(ChannelLike):  # pragma: no cover
             immediate=immediate,
         )
 
+    @override
     async def basic_get(self, queue: str, *, no_ack: bool = False) -> AMQPMessage | None:
         return await self._delegate.basic_get(queue=queue, no_ack=no_ack)
 

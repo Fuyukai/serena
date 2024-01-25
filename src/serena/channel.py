@@ -81,7 +81,6 @@ logger: LoggerWithTrace = LoggerWithTrace.get(__name__)
 PayloadType = TypeVar("PayloadType", bound=MethodPayload)
 
 
-# noinspection PyProtectedMember
 class Channel(ChannelLike):
     """
     A wrapper around an AMQP channel.
@@ -371,7 +370,7 @@ class Channel(ChannelLike):
         durable: bool = False,
         auto_delete: bool = False,
         internal: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> str:
         """
         Declares a new exchange.
@@ -401,7 +400,7 @@ class Channel(ChannelLike):
             auto_delete=auto_delete,
             internal=internal,
             no_wait=False,
-            arguments=arguments,
+            arguments=arguments or {},
         )
 
         await self._send_and_receive_frame(payload, ExchangeDeclareOkPayload)
@@ -438,7 +437,7 @@ class Channel(ChannelLike):
         destination: str,
         source: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Binds an exchange to another exchange. This is a
@@ -460,7 +459,7 @@ class Channel(ChannelLike):
             source_name=source,
             routing_key=routing_key,
             no_wait=False,
-            arguments=arguments,
+            arguments=arguments or {},
         )
 
         await self._send_and_receive_frame(payload, ExchangeBindOkPayload)
@@ -471,7 +470,7 @@ class Channel(ChannelLike):
         destination: str,
         source: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Unbinds an exchange from another exchange. This is a
@@ -493,7 +492,7 @@ class Channel(ChannelLike):
             source_name=source,
             routing_key=routing_key,
             no_wait=False,
-            arguments=arguments,
+            arguments=arguments or {},
         )
 
         await self._send_and_receive_frame(payload, ExchangeUnBindOkPayload)
@@ -507,7 +506,7 @@ class Channel(ChannelLike):
         durable: bool = False,
         exclusive: bool = False,
         auto_delete: bool = False,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> QueueDeclareOkPayload:
         """
         Declares a queue.
@@ -550,7 +549,7 @@ class Channel(ChannelLike):
         queue_name: str,
         exchange_name: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Binds a queue to an exchange.
@@ -568,7 +567,7 @@ class Channel(ChannelLike):
             exchange_name=exchange_name,
             routing_key=routing_key,
             no_wait=False,
-            arguments=arguments,
+            arguments=arguments or {},
         )
 
         await self._send_and_receive_frame(payload, QueueBindOkPayload)
@@ -628,7 +627,7 @@ class Channel(ChannelLike):
         queue_name: str,
         exchange_name: str,
         routing_key: str,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> None:
         """
         Unbinds a queue from an exchange.
@@ -645,7 +644,7 @@ class Channel(ChannelLike):
             exchange_name=exchange_name,
             routing_key=routing_key,
             no_wait=False,
-            arguments=arguments,
+            arguments=arguments or {},
         )
 
         await self._send_and_receive_frame(payload, QueueUnbindOkPayload)
@@ -661,7 +660,7 @@ class Channel(ChannelLike):
         no_ack: bool = False,
         exclusive: bool = False,
         auto_ack: bool = True,
-        **arguments: Any,
+        arguments: dict[str, Any] | None = None,
     ) -> AsyncGenerator[AsyncIterable[AMQPMessage], None]:
         """
         Starts a basic consume operation. This returns an async context manager over an asynchronous

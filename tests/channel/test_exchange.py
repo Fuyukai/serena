@@ -62,10 +62,7 @@ async def test_ex_binding():
     exchange_name = f"ex-bind-1-{test_suffix}"
     ex_2 = f"ex-bind-2-{test_suffix}"
 
-    async with (
-        open_connection("127.0.0.1") as conn,
-        conn.open_channel() as channel
-    ):
+    async with open_connection("127.0.0.1") as conn, conn.open_channel() as channel:
         await channel.exchange_declare(exchange_name, ExchangeType.DIRECT)
         await channel.exchange_declare(ex_2, ExchangeType.DIRECT)
         await channel.exchange_bind(exchange_name, ex_2, routing_key="")
