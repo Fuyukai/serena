@@ -1,8 +1,10 @@
 import pytest
-from serena.connection import open_connection
 from serena.enums import ReplyCode
 from serena.exc import MessageReturnedError
+from serena.message import AMQPMessage
 from serena.payloads.header import BasicHeader
+
+from tests import _open_connection
 
 pytestmark = pytest.mark.anyio
 
@@ -12,7 +14,7 @@ async def test_basic_publish():
     Tests publishing a message to a queue, and getting the message back.
     """
 
-    async with open_connection("127.0.0.1") as conn, conn.open_channel() as channel:
+    async with _open_connection() as conn, conn.open_channel() as channel:
         queue = await channel.queue_declare(name="", exclusive=True)
 
         result = await channel.basic_get(queue.name)
@@ -30,7 +32,7 @@ async def test_consumption():
     Tests consuming asynchronously.
     """
 
-    async with open_connection("127.0.0.1") as conn, conn.open_channel() as channel:
+    async with _open_connection() as conn, conn.open_channel() as channel:
         queue = await channel.queue_declare(name="", exclusive=True)
 
         counter = 0
@@ -38,7 +40,7 @@ async def test_consumption():
             await channel.basic_publish("", routing_key=queue.name, body=b"test")
             counter += 1
 
-        messages = []
+        messages: list[AMQPMessage] = []
         queue = await channel.queue_declare(name=queue.name, passive=True)
         assert queue.message_count == 10
 
@@ -59,7 +61,7 @@ async def test_acks():
     Tests message acknowledgement.
     """
 
-    async with open_connection("127.0.0.1") as conn, conn.open_channel() as channel:
+    async with _open_connection() as conn, conn.open_channel() as channel:
         queue = await channel.queue_declare(name="", exclusive=True)
         await channel.basic_publish("", routing_key=queue.name, body=b"test")
 
@@ -83,7 +85,7 @@ async def test_publishing_headers():
     Tests publishing header data.
     """
 
-    async with open_connection("127.0.0.1") as conn, conn.open_channel() as channel:
+    async with _open_connection() as conn, conn.open_channel() as channel:
         queue = await channel.queue_declare("", exclusive=True)
         headers = BasicHeader(message_id="123456")
 
@@ -99,7 +101,7 @@ async def test_return():
     Tests message returning.
     """
 
-    async with open_connection("127.0.0.1") as conn:
+    async with _open_connection() as conn:
         async with conn.open_channel() as channel:
             with pytest.raises(MessageReturnedError) as e:
                 await channel.basic_publish("", routing_key="non-existent-queue", body=b"")

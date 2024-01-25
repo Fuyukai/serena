@@ -360,10 +360,12 @@ class EncodingBuffer:
         self._write(struct.pack(">q", value))
 
     @overload
-    def write_timestamp(self, value: datetime) -> None: ...
+    def write_timestamp(self, value: datetime) -> None:
+        ...
 
     @overload
-    def write_timestamp(self, value: int) -> None: ...
+    def write_timestamp(self, value: int) -> None:
+        ...
 
     def write_timestamp(self, value: datetime | int) -> None:
         """

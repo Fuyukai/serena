@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Self
+
 from typing_extensions import override
 
 from serena.enums import ReplyCode

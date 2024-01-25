@@ -1,0 +1,87 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request: {}
+
+jobs:
+    verify-types:
+        name: "Pyright Verify Types"
+        runs-on: "ubuntu-latest"
+
+        steps:
+            - name: "Checkout repository"
+              uses: "actions/checkout@v4"
+
+            - name: Load cached Poetry installation
+              id: cached-poetry
+              uses: actions/cache@v3
+              with:
+                  path: ~/.local
+                  key: poetry-0
+
+            - name: "Install Poetry"
+              if: steps.cached-poetry.outputs.cache-hit != 'true'
+              uses: "snok/install-poetry@v1"
+
+            - name: "Install Python 3.11"
+              uses: "actions/setup-python@v5"
+              with:
+                  python-version: "3.11"
+                  cache: "poetry"
+
+            - name: "Install project"
+              run: poetry install --all-extras --no-interaction --no-ansi
+
+            - name: "Run Pyright"
+              run: "poetry run pyright --verifytypes serena --ignoreexternal"
+
+    test-rabbitmq:
+        strategy:
+            fail-fast: false
+            matrix:
+                image: ["latest", "3.13-rc"]
+
+        name: "Test on RabbitMQ server ${{ matrix.image }}"
+        runs-on: ubuntu-latest
+
+        services:
+            amqp:
+                image: "rabbitmq:${{ matrix.image }}"
+                ports:
+                    - 5672
+
+        steps:
+            - name: "Checkout repository"
+              uses: "actions/checkout@v4"
+
+            - name: Load cached Poetry installation
+              id: cached-poetry
+              uses: actions/cache@v3
+              with:
+                  path: ~/.local
+                  key: poetry-0
+
+            - name: "Install Poetry"
+              if: steps.cached-poetry.outputs.cache-hit != 'true'
+              uses: "snok/install-poetry@v1"
+
+            - name: "Install Python 3.11"
+              uses: "actions/setup-python@v5"
+              with:
+                  python-version: "3.11"
+                  cache: "poetry"
+
+            - name: "Install project"
+              run: poetry install --all-extras --no-interaction --no-ansi
+
+            - name: "Run Pytest"
+              run: 'poetry run pytest -rPx -m ""'  # override all markers
+              env:
+                  AMQP_PORT: ${{ job.services.amqp.ports[5672] }}
+
+            - name: Upload coverage reports to Codecov
+              uses: codecov/codecov-action@v3
+              env:
+                  CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"

@@ -86,7 +86,7 @@ class HeartbeatStatistics:
     prev_heartbeat_mn: int = attr.ib(default=-1)
 
     #: The current heartbeat time, in monotonic nanoseconds.
-    cur_heartbeat_mn: int = attr.ib(default=None)
+    cur_heartbeat_mn: int = attr.ib(default=-1)
 
     #: The previous heartbeat time, in wall clock time.
     prev_heartbeat_time: datetime = attr.ib(default=None)
@@ -100,7 +100,7 @@ class HeartbeatStatistics:
         Returns the interval between two heartbeats in nanoseconds.
         """
 
-        if self.prev_heartbeat_mn == -1:
+        if self.prev_heartbeat_mn == -1 or self.cur_heartbeat_mn == -1:
             return None
 
         return self.cur_heartbeat_mn - self.prev_heartbeat_mn

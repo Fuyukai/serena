@@ -4,6 +4,8 @@ from serena.connection import open_connection
 from serena.enums import ReplyCode
 from serena.exc import UnexpectedCloseError
 
+from tests import _open_connection, AMQP_HOST, AMQP_PORT, AMQP_USERNAME
+
 pytestmark = pytest.mark.anyio
 
 
@@ -12,7 +14,7 @@ async def test_connection_opening():
     Tests the basics of opening and closing a connection.
     """
 
-    async with open_connection("127.0.0.1") as conn:
+    async with _open_connection() as conn:
         assert conn.open
 
     assert not conn.open
@@ -24,7 +26,7 @@ async def test_heartbeat_intervals():
     Tests heartbeat intervals.
     """
 
-    async with open_connection("127.0.0.1", heartbeat_interval=2) as conn:
+    async with _open_connection(heartbeat_interval=2) as conn:
         await sleep(4)
 
     assert conn.heartbeat_statistics().heartbeat_count > 2
@@ -36,7 +38,7 @@ async def test_bad_virtual_host():
     """
 
     with pytest.raises(UnexpectedCloseError) as e:
-        async with open_connection("127.0.0.1", virtual_host="/does_not_exist"):
+        async with _open_connection(virtual_host="/does_not_exist"):
             pass
 
     assert e.value.reply_code == ReplyCode.not_allowed
@@ -48,7 +50,9 @@ async def test_bad_authentication():
     """
 
     with pytest.raises(UnexpectedCloseError) as e:
-        async with open_connection("127.0.0.1", password="not the right password!"):
+        async with open_connection(
+            AMQP_HOST, port=AMQP_PORT, username=AMQP_USERNAME, password="not the right password!"
+        ):
             pass
 
     assert e.value.reply_code == ReplyCode.access_refused
@@ -61,7 +65,7 @@ async def test_server_side_close():
     """
 
     with pytest.raises(UnexpectedCloseError):
-        async with open_connection("127.0.0.1") as conn:
+        async with _open_connection() as conn:
             async with conn.open_channel() as channel:
                 # immediate causes a close with rabbitmq
                 await channel.basic_publish("", "", b"", immediate=True)

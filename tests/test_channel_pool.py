@@ -2,7 +2,9 @@ import uuid
 
 import anyio
 import pytest
-from serena import UnexpectedCloseError, open_connection
+from serena import UnexpectedCloseError
+
+from tests import _open_connection
 
 pytestmark = pytest.mark.anyio
 
@@ -14,7 +16,7 @@ async def test_channel_pool():
     Tests opening and using the channel pool.
     """
 
-    async with open_connection("127.0.0.1") as conn:
+    async with _open_connection() as conn:
         async with conn.open_channel_pool(initial_channels=2) as pool:
             assert pool.idle_channels == 2
 
@@ -30,7 +32,7 @@ async def test_channel_pool_consume():
     """
 
     async with (
-        open_connection("127.0.0.1") as conn,
+        _open_connection() as conn,
         conn.open_channel_pool(initial_channels=2) as pool,
     ):
         queue = await pool.queue_declare(name=f"test-cc-{test_suffix}", auto_delete=True)
@@ -51,7 +53,7 @@ async def test_channel_pool_errors():
     """
 
     async with (
-        open_connection("127.0.0.1") as conn,
+        _open_connection() as conn,
         conn.open_channel_pool(initial_channels=2) as pool,
     ):
         with pytest.raises(UnexpectedCloseError):
