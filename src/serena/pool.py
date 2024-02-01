@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import asynccontextmanager
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -67,7 +67,6 @@ class ChannelPool(ChannelLike):
         """
 
         for _ in range(0, initial_size):
-            # noinspection PyAsyncCall
             self._qwrite.send_nowait(await self._conn._open_channel())
 
     async def _close(self) -> None:
@@ -94,20 +93,16 @@ class ChannelPool(ChannelLike):
         while True:
             await self._needs_new_connection.wait()
             channel = await self._conn._open_channel()
-            # noinspection PyAsyncCall
             self._qwrite.send_nowait(channel)
 
-    # re-exported so that pycharm likes the type annotation better
-    def checkout(self) -> AbstractAsyncContextManager[Channel]:
-        """
-        Checks out a new channel from the pool, and uses it persistently. The channel lifetime
-        will be automatically managed for you.
-        """
-
-        return self._checkout()
-
     @asynccontextmanager
-    async def _checkout(self) -> AsyncGenerator[Channel, None]:
+    async def checkout(self) -> AsyncGenerator[Channel, None]:
+        """
+        Checks out a new channel from the pool, and uses it persistently.
+
+        The channel lifetime will be automatically managed for you.
+        """
+
         channel = await self._qread.receive()
 
         try:
@@ -158,7 +153,7 @@ class ChannelPool(ChannelLike):
         """
 
         async with (
-            self._checkout() as channel,
+            self.checkout() as channel,
             channel.basic_consume(
                 queue_name=queue_name,
                 consumer_tag=consumer_tag,
@@ -182,7 +177,7 @@ class ChannelPool(ChannelLike):
         :return: A :class:`.AMQPMessage` if one existed on the queue, otherwise None.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             return await channel.basic_get(
                 queue=queue,
                 no_ack=no_ack,
@@ -219,7 +214,7 @@ class ChannelPool(ChannelLike):
             to close.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             await channel.basic_publish(
                 exchange_name=exchange_name,
                 routing_key=routing_key,
@@ -251,7 +246,7 @@ class ChannelPool(ChannelLike):
         :return: Nothing.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             await channel.exchange_bind(
                 destination=destination,
                 source=source,
@@ -287,7 +282,7 @@ class ChannelPool(ChannelLike):
         :return: The name of the exchange, as it exists on the server.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             return await channel.exchange_declare(
                 name=name,
                 type=type,
@@ -309,7 +304,7 @@ class ChannelPool(ChannelLike):
 
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             await channel.exchange_delete(
                 name=name,
                 if_unused=if_unused,
@@ -337,7 +332,7 @@ class ChannelPool(ChannelLike):
 
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             await channel.exchange_unbind(
                 destination=destination,
                 source=source,
@@ -363,7 +358,7 @@ class ChannelPool(ChannelLike):
 
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             await channel.queue_bind(
                 queue_name=queue_name,
                 exchange_name=exchange_name,
@@ -400,7 +395,7 @@ class ChannelPool(ChannelLike):
         :return: The :class:`.QueueDeclareOkPayload` the server returned.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             return await channel.queue_declare(
                 name=name,
                 passive=passive,
@@ -423,7 +418,7 @@ class ChannelPool(ChannelLike):
         :return: The number of messages deleted.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             return await channel.queue_delete(
                 queue_name=queue_name,
                 if_empty=if_empty,
@@ -439,7 +434,7 @@ class ChannelPool(ChannelLike):
         :return: The number of messages deleted.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             return await channel.queue_purge(
                 queue_name=queue_name,
             )
@@ -461,7 +456,7 @@ class ChannelPool(ChannelLike):
         :param arguments: Implementation-specific arguments to use.
         """
 
-        async with self._checkout() as channel:
+        async with self.checkout() as channel:
             return await channel.queue_unbind(
                 queue_name=queue_name,
                 exchange_name=exchange_name,

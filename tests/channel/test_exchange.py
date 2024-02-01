@@ -29,8 +29,8 @@ async def test_ex_declaration_invalid_type():
 
     with pytest.raises(UnexpectedCloseError) as e:
         async with _open_connection() as conn:
-                async with conn.open_channel() as channel:
-                    await channel.exchange_declare(name="invalid", type="invalid")
+            async with conn.open_channel() as channel:
+                await channel.exchange_declare(name="invalid", type="invalid")
 
     assert e.value.reply_code in (ReplyCode.command_invalid, ReplyCode.precondition_failed)
 

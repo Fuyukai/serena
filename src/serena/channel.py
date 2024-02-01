@@ -166,7 +166,7 @@ class Channel(ChannelLike):
             # todo: switch to our own exception?
             raise ClosedResourceError("This channel is closed")
 
-    async def _close(self, payload: ChannelClosePayload | None) -> None:
+    def _close(self, payload: ChannelClosePayload | None) -> None:
         """
         Closes this channel.
         """
@@ -179,9 +179,6 @@ class Channel(ChannelLike):
         self._closed = True
 
         self._close_event.set()
-
-        # aclose doesn't seem to checkpoint...
-        await checkpoint()
 
     def _enqueue_regular(self, frame: MethodFrame[MethodPayload]) -> None:
         """

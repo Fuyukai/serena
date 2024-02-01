@@ -4,7 +4,7 @@ from serena.connection import open_connection
 from serena.enums import ReplyCode
 from serena.exc import UnexpectedCloseError
 
-from tests import _open_connection, AMQP_HOST, AMQP_PORT, AMQP_USERNAME
+from tests import AMQP_HOST, AMQP_PORT, AMQP_USERNAME, _open_connection
 
 pytestmark = pytest.mark.anyio
 

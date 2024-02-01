@@ -486,14 +486,14 @@ class AMQPConnection:
                 # noinspection PyAsyncCall
                 self._cancel_scope.cancel()
 
-    async def _remove_channel(self, channel_id: int, payload: ChannelClosePayload | None) -> None:
+    def _remove_channel(self, channel_id: int, payload: ChannelClosePayload | None) -> None:
         """
         Removes a channel.
         """
 
         self._channels[channel_id] = False
         chan = self._channel_channels.pop(channel_id)
-        await chan._close(payload)
+        chan._close(payload)
 
     async def _enqueue_frame(self, channel: Channel, frame: Frame) -> None:
         """
@@ -596,7 +596,7 @@ class AMQPConnection:
                     # ack the close
                     # todo: should his be here?
                     try:
-                        await self._remove_channel(channel, close_payload)
+                        self._remove_channel(channel, close_payload)
                     finally:
                         if is_unclean:
                             await self._send_method_frame(channel, ChannelCloseOkPayload())
@@ -625,12 +625,31 @@ class AMQPConnection:
                 channel_object = self._channel_channels[channel]
                 await self._enqueue_frame(channel_object, frame)
 
+    async def _listen_wrapper(self) -> None:
+        """
+        Wraps ``listen_for_messages`` so that it'll automatically signal to all channels if
+        the task is closed.
+        """
+
+        # https://matrix.to/#/%23python-trio_general%3Agitter.im/%24b81b-VPgvL6z6ALlACbL27TYjAk27Bz_jIM6q39QWW0?via=gitter.im&via=matrix.org
+        # Basically, if the top-most task that holds the connection open is cancelled, then the
+        # "wait for channel closure" logic won't be fired, because the task actually responsible for
+        # pumping the messages around is killed.
+        #
+        # So, this wraps the listen function in a try/finally that sets the event manually.
+
+        try:
+            await self._listen_for_messages()
+        finally:
+            for channel in self._channel_channels.values():
+                channel._close(None)
+
     def _start_tasks(self, nursery: TaskGroup) -> None:
         """
         Starts the background tasks for this connection.
         """
         self._cancel_scope = nursery.cancel_scope
-        nursery.start_soon(self._listen_for_messages)
+        nursery.start_soon(self._listen_wrapper)
         nursery.start_soon(self._heartbeat_loop)
 
     async def _close(self, reply_code: int = 200, reply_text: str = "Normal close") -> None:
