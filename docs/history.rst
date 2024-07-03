@@ -3,6 +3,13 @@
 Version History
 ===============
 
+0.9.1 (2024-07-03)
+==================
+
+- Fix channel pools deadlocking everything on connection cancellation.
+
+- Fix a bug in frameparsers not truncating the end.
+
 0.9.0 (2024-01-25)
 ==================
 
