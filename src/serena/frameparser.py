@@ -192,8 +192,8 @@ class FrameParser:
                 return NEED_DATA
 
             # truncate frame-end octet
-            assert body[-1] == 0xCE, "invalid frame-end octet"
-            body = body[:-1]
+            assert self._last_packet_buffer[-1] == 0xCE, "invalid frame-end octet"
+            body = self._last_packet_buffer[:-1]
 
             # packet finished, construct frame from saved values
             self._processing_partial_packet = False
