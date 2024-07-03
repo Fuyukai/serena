@@ -27,12 +27,13 @@ async def test_ex_declaration_invalid_type():
     Tests declaration with an invalid type.
     """
 
-    with pytest.raises(UnexpectedCloseError) as e:
+    with pytest.raises(ExceptionGroup) as e:  # type: ignore
         async with _open_connection() as conn:
             async with conn.open_channel() as channel:
                 await channel.exchange_declare(name="invalid", type="invalid")
 
-    assert e.value.reply_code in (ReplyCode.command_invalid, ReplyCode.precondition_failed)
+    assert isinstance(unwrapped := e.value.exceptions[0], UnexpectedCloseError)  # type: ignore
+    assert unwrapped.reply_code in (ReplyCode.command_invalid, ReplyCode.precondition_failed)
 
 
 async def test_ex_delete():
