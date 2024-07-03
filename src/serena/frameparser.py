@@ -197,9 +197,7 @@ class FrameParser:
 
             # packet finished, construct frame from saved values
             self._processing_partial_packet = False
-            frame = self._make_frame(
-                self._saved_type, self._saved_channel, bytes(body)
-            )
+            frame = self._make_frame(self._saved_type, self._saved_channel, bytes(body))
             self._last_packet_buffer = bytearray()
 
             return frame

@@ -36,9 +36,9 @@ sphinx-autodoc-typehints = ">=1.25.3"
 pytest = ">=8.0.0"
 trio = ">=0.24.0"
 pytest-cov = ">=4.1.0"
-ruff = ">=0.1.15"
+ruff = ">=0.5.0"
 mypy = ">=1.8.0"
-pyright = ">=1.1.349"
+pyright = ">=1.1.370"
 
 
 [tool.pytest.ini_options]
@@ -73,8 +73,8 @@ respect-gitignore = true
 # fix = true
 src = ["src/serena"]
 line-length = 100
-show-source = true
 
+[tool.ruff.lint]
 select = [
   "RUF",
   "F",
@@ -85,7 +85,6 @@ select = [
   "B",
   "YTT",
   "ASYNC",
-  "TRIO",
   "PYI",
   "SIM",
   "RET",
@@ -94,13 +93,14 @@ select = [
 ignore = [
     "W291",
     "W293",
-    "E266"
+    "E266",
+    "RUF018"
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 combine-as-imports = true
 
-[tool.ruff.extend-per-file-ignores]
+[tool.ruff.lint.extend-per-file-ignores]
 # why the fuck is this not the default?
 "__init__.py" = ["E402", "F401"]
 
