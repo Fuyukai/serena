@@ -6,6 +6,7 @@ from typing import Self
 from typing_extensions import override
 
 from serena.enums import ReplyCode
+from serena.payloads.header import BasicHeader
 from serena.payloads.method import (
     ChannelClosePayload,
     ConnectionClosePayload,
@@ -52,7 +53,16 @@ class MessageReturnedError(AMQPError):
     Thrown when a message is returned unexpectedly.
     """
 
-    def __init__(self, reply_code: ReplyCode, reply_text: str, exchange: str, routing_key: str):
+    def __init__(
+        self,
+        reply_code: ReplyCode,
+        reply_text: str,
+        exchange: str,
+        routing_key: str,
+        *,
+        header: BasicHeader | None = None,
+        body: bytes = b"",
+    ):
         #: The server-provided error code.
         self.reply_code = reply_code
         #: The server-provided error text.
@@ -63,6 +73,12 @@ class MessageReturnedError(AMQPError):
 
         #: The routing key the message was using.
         self.routing_key = routing_key
+
+        #: The returned message header.
+        self.header = header or BasicHeader()
+
+        #: The returned message body.
+        self.body = body
 
     @override
     def __str__(self) -> str:

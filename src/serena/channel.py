@@ -12,8 +12,9 @@ from typing import (
 )
 
 import anyio
+import attr
 import outcome
-from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock
+from anyio import CancelScope, ClosedResourceError, EndOfStream, Event, Lock, WouldBlock
 from anyio.abc import TaskStatus
 from anyio.lowlevel import checkpoint
 from outcome import Error, Value
@@ -29,7 +30,7 @@ from serena.exc import (
 from serena.frame import BodyFrame, Frame
 from serena.message import AMQPEnvelope, AMQPMessage
 from serena.mixin import ChannelLike
-from serena.payloads.header import BasicHeader, ContentHeaderFrame, ContentHeaderPayload
+from serena.payloads.header import BasicHeader, ContentHeaderFrame
 from serena.payloads.method import (
     BasicAckPayload,
     BasicCancelPayload,
@@ -76,6 +77,47 @@ logger: LoggerWithTrace = LoggerWithTrace.get(__name__)
 PayloadType = TypeVar("PayloadType", bound=MethodPayload)
 
 
+@attr.s(slots=True, frozen=True)
+class _ContentMessage:
+    method: MethodFrame[MethodPayload] = attr.ib()
+    header: BasicHeader = attr.ib()
+    body: bytes = attr.ib()
+
+
+class _ContentAssembly:
+    def __init__(self, method: MethodFrame[MethodPayload]) -> None:
+        self.method = method
+        self._header: ContentHeaderFrame | None = None
+        self._body = bytearray()
+
+    def feed(self, frame: ContentHeaderFrame | BodyFrame) -> _ContentMessage | None:
+        if self._header is None:
+            if not isinstance(frame, ContentHeaderFrame):
+                raise AMQPStateError(f"Expected a header frame, got {frame} instead")
+
+            if frame.payload.class_id != self.method.payload.klass:
+                raise AMQPStateError(
+                    f"Class mismatch ({frame.payload.class_id} != {self.method.payload.klass})"
+                )
+
+            self._header = frame
+        else:
+            if not isinstance(frame, BodyFrame):
+                raise AMQPStateError(f"Expected a body frame, got {frame} instead")
+
+            self._body += frame.data
+
+        header = self._header
+        if len(self._body) >= header.payload.full_size:
+            return _ContentMessage(
+                method=self.method,
+                header=header.payload.payload,
+                body=bytes(self._body),
+            )
+
+        return None
+
+
 class Channel(ChannelLike):
     """
     A wrapper around an AMQP channel.
@@ -106,6 +148,7 @@ class Channel(ChannelLike):
         self._delivery_send, self._delivery_receive = anyio.create_memory_object_stream[Frame](
             max_buffer_size=stream_buffer_size
         )
+        self._returned_content: dict[int, _ContentMessage] = {}
 
         self._close_info: ChannelClosePayload | None = None
         self._lock = Lock()
@@ -194,30 +237,30 @@ class Channel(ChannelLike):
 
         await self._delivery_send.send(frame)
 
+    def _enqueue_return(self, message: _ContentMessage) -> None:
+        """
+        Enqueues a complete Basic.Return message.
+        """
+
+        self._returned_content[id(message.method)] = message
+        try:
+            self._enqueue_regular(message.method)
+        except WouldBlock:
+            self._returned_content.pop(id(message.method), None)
+            raise
+
+    def _pop_return_content(self, frame: MethodFrame[MethodPayload]) -> _ContentMessage | None:
+        return self._returned_content.pop(id(frame), None)
+
     async def _receive_delivery_message(self) -> AMQPMessage | None:
         """
         Receives a single delivery message. This will reassemble a full message into its constituent
         frames.
         """
 
-        method: MethodFrame[MethodPayload] | None = None
-        headers = None
-        body = b""
+        assembly: _ContentAssembly | None = None
 
         while True:
-            # check for successful reassembly first
-            if headers is not None and len(body) >= headers.payload.full_size:
-                assert method is not None, "reached reassembly with invalid method"
-
-                await checkpoint()
-                # hehe payload.payload
-                return AMQPMessage(
-                    channel=self,
-                    envelope=AMQPEnvelope.of(method.payload),
-                    header=headers.payload.payload,
-                    body=body,
-                )
-
             try:
                 next_frame = await self._delivery_receive.receive()
             except EndOfStream:
@@ -226,14 +269,14 @@ class Channel(ChannelLike):
 
                 raise UnexpectedCloseError.of(self._close_info) from None
 
-            if method is None:
+            if assembly is None:
                 if not isinstance(next_frame, MethodFrame):
                     raise AMQPStateError(f"Expected a method frame, got {next_frame} instead")
 
                 method_frame: MethodFrame[MethodPayload] = next_frame
 
                 if isinstance(method_frame.payload, BasicGetOkPayload | BasicDeliverPayload):
-                    method = method_frame
+                    assembly = _ContentAssembly(method_frame)
 
                 elif isinstance(method_frame.payload, BasicGetEmptyPayload):
                     return None
@@ -244,24 +287,19 @@ class Channel(ChannelLike):
                         f"got {method_frame.payload} instead"
                     )
 
-            elif headers is None:
-                if not isinstance(next_frame, ContentHeaderFrame):
-                    raise AMQPStateError(f"Expected a header frame, got {next_frame} instead")
-
-                # explicit type hint as pycharm incorrectly infers based on the previous if check
-                payload: ContentHeaderPayload = next_frame.payload
-                if payload.class_id != method.payload.klass:
-                    raise AMQPStateError(
-                        f"Class mismatch ({payload.class_id} != {method.payload.klass})"
-                    )
-
-                headers = next_frame
-
             else:
-                if not isinstance(next_frame, BodyFrame):
-                    raise AMQPStateError(f"Expected a body frame, got {next_frame} instead")
+                if not isinstance(next_frame, ContentHeaderFrame | BodyFrame):
+                    raise AMQPStateError(f"Expected a content frame, got {next_frame} instead")
 
-                body += next_frame.data
+                message = assembly.feed(next_frame)
+                if message is not None:
+                    await checkpoint()
+                    return AMQPMessage(
+                        channel=self,
+                        envelope=AMQPEnvelope.of(message.method.payload),
+                        header=message.header,
+                        body=message.body,
+                    )
 
     async def _receive_frame(self) -> MethodFrame[MethodPayload]:
         """
@@ -814,11 +852,14 @@ class Channel(ChannelLike):
                 logger.trace(f"C#{self.id}: Server ACKed published message")
 
             elif isinstance(payload, BasicReturnPayload):
+                returned_content = self._pop_return_content(response)
                 raise MessageReturnedError(
                     exchange=payload.exchange,
                     routing_key=payload.routing_key,
                     reply_code=payload.reply_code,
                     reply_text=payload.reply_text,
+                    header=returned_content.header if returned_content is not None else None,
+                    body=returned_content.body if returned_content is not None else b"",
                 )
 
             elif isinstance(payload, BasicNackPayload):

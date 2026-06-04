@@ -20,7 +20,7 @@ from anyio import CancelScope, EndOfStream, Lock, WouldBlock, sleep
 from anyio.abc import ByteStream, TaskGroup
 from anyio.lowlevel import checkpoint
 
-from serena.channel import Channel
+from serena.channel import Channel, _ContentAssembly
 from serena.enums import ClassID, ReplyCode
 from serena.exc import (
     AMQPError,
@@ -29,15 +29,16 @@ from serena.exc import (
     InvalidProtocolError,
     UnexpectedCloseError,
 )
-from serena.frame import Frame, FrameType
+from serena.frame import BodyFrame, Frame, FrameType
 from serena.frameparser import NEED_DATA, FrameParser
-from serena.payloads.header import BasicHeader
+from serena.payloads.header import BasicHeader, ContentHeaderFrame
 from serena.payloads.method import (
     BasicDeliverPayload,
     BasicGetEmptyPayload,
     BasicGetOkPayload,
     BasicQOSOkPayload,
     BasicQOSPayload,
+    BasicReturnPayload,
     ChannelCloseOkPayload,
     ChannelClosePayload,
     ChannelOpenPayload,
@@ -159,6 +160,7 @@ class AMQPConnection:
 
         # mapping of channel id -> Channel
         self._channel_channels: dict[int, Channel] = {}
+        self._return_assemblies: dict[int, _ContentAssembly] = {}
 
         self._write_lock = Lock()
 
@@ -492,6 +494,7 @@ class AMQPConnection:
         """
 
         self._channels[channel_id] = False
+        self._return_assemblies.pop(channel_id, None)
         chan = self._channel_channels.pop(channel_id)
         chan._close(payload)
 
@@ -603,7 +606,10 @@ class AMQPConnection:
 
                     continue
 
-                if isinstance(
+                if isinstance(payload, BasicReturnPayload):
+                    self._return_assemblies[channel] = _ContentAssembly(method_frame)
+
+                elif isinstance(
                     payload, BasicDeliverPayload | BasicGetOkPayload | BasicGetEmptyPayload
                 ):
                     # requires special logic
@@ -623,6 +629,21 @@ class AMQPConnection:
                 channel = frame.channel_id
                 assert channel != 0, "header frame cannot happen on control channel"
                 channel_object = self._channel_channels[channel]
+
+                if assembly := self._return_assemblies.get(channel):
+                    assert isinstance(frame, ContentHeaderFrame | BodyFrame)
+                    content = assembly.feed(frame)
+                    if content is not None:
+                        self._return_assemblies.pop(channel, None)
+                        try:
+                            channel_object._enqueue_return(content)
+                        except WouldBlock:
+                            logger.warning(
+                                f"Channel #{channel} was not listening for returned message, "
+                                "dropping"
+                            )
+                    continue
+
                 await self._enqueue_frame(channel_object, frame)
 
     async def _listen_wrapper(self) -> None:
